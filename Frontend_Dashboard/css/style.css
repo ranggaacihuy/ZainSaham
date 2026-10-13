@@ -1,0 +1,45 @@
+* {
+  font-family: 'Poppins', sans-serif;
+}
+
+body {
+  background-color: #060a12;
+  color: #f1f5f9;
+  letter-spacing: -0.01em;
+}
+
+/* Custom Matte Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #091122;
+}
+::-webkit-scrollbar-thumb {
+  background: #1e3056;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #284072;
+}
+
+.card-matte {
+  background-color: #0d172e;
+  border: 1px solid #1e3056;
+}
+
+.card-matte-sub {
+  background-color: #121e3a;
+  border: 1px solid #1e3056;
+}
+
+.btn-matte {
+  background-color: #121e3a;
+  border: 1px solid #1e3056;
+  transition: all 0.2s ease;
+}
+.btn-matte:hover {
+  background-color: #162446;
+  border-color: #284072;
+}
