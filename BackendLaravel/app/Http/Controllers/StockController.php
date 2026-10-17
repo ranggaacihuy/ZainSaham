@@ -15,9 +15,11 @@ class StockController extends Controller
     }
 
     // GET /api/stocks
-    public function index()
+    public function index(Request $request)
     {
-        $stocks = $this->stockService->getAllStocks();
+        $search = $request->query('q');
+        $sector = $request->query('sector');
+        $stocks = $this->stockService->getAllStocks($search, $sector);
 
         return response()->json([
             'success' => true,
