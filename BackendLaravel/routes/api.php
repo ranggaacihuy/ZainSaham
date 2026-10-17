@@ -3,6 +3,7 @@
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\StockController;
 use App\Http\Controllers\AiAnalysisController;
+use App\Http\Controllers\AiChatController;
 
 Route::get('/stocks', [StockController::class, 'index']);
 Route::get('/stocks/{stockId}/prices', [StockController::class, 'prices']);
@@ -15,3 +16,9 @@ Route::post('/watchlists', [StockController::class, 'addToWatchlist']);
 Route::delete('/watchlists/{watchlistId}', [StockController::class, 'removeFromWatchlist']);
 Route::get('/stocks/{stockId}/ai-analysis', [AiAnalysisController::class, 'index']);
 Route::post('/ai-analysis', [AiAnalysisController::class, 'store']);
+
+Route::post('/ai-chat', [AiChatController::class, 'chat']);
+Route::get('/ai-chat/{sessionId}/messages', [
+    AiChatController::class,
+    'messages'
+]);

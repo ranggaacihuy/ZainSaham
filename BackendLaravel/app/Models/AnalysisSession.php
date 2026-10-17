@@ -50,4 +50,14 @@ class AnalysisSession extends Model
             'session_id'
         );
     }
+
+    public function aiMessages()
+    {
+        return $this->hasMany(
+            AiMessage::class,
+            'session_id',
+            'session_id'
+        );
+    }
+
 }
