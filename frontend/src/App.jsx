@@ -1,6 +1,6 @@
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { ToastProvider } from './context/ToastContext';
-import { AuthProvider } from './context/AuthContext';
+import { AuthProvider, useAuth } from './context/AuthContext';
 import { WatchlistProvider } from './context/WatchlistContext';
 import AppLayout from './components/AppLayout';
 import NotFound from './components/NotFound';
@@ -11,10 +11,35 @@ import WatchlistPage from './pages/WatchlistPage';
 import AiAnalysisPage from './pages/AiAnalysisPage';
 import AnalysisHistoryPage from './pages/AnalysisHistoryPage';
 import ProfilePage from './pages/ProfilePage';
+import LoginPage from './pages/LoginPage';
+import RegisterPage from './pages/RegisterPage';
 
-// TODO: aktifkan saat backend punya auth Sanctum.
-// import LoginPage from './pages/LoginPage';
-// import RegisterPage from './pages/RegisterPage';
+function RequireAuth({ children }) {
+  const { isAuthenticated, loading } = useAuth();
+  const location = useLocation();
+
+  if (loading && !isAuthenticated) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-bg text-sm text-text-muted">
+        Memuat sesi…
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+
+  return children;
+}
+
+function GuestOnly({ children }) {
+  const { isAuthenticated } = useAuth();
+  if (isAuthenticated) {
+    return <Navigate to="/dashboard" replace />;
+  }
+  return children;
+}
 
 export default function App() {
   return (
@@ -23,11 +48,30 @@ export default function App() {
         <WatchlistProvider>
           <BrowserRouter>
             <Routes>
-              {/* TODO: aktifkan saat backend punya auth Sanctum */}
-              {/* <Route path="/login" element={<LoginPage />} /> */}
-              {/* <Route path="/register" element={<RegisterPage />} /> */}
+              <Route
+                path="/login"
+                element={
+                  <GuestOnly>
+                    <LoginPage />
+                  </GuestOnly>
+                }
+              />
+              <Route
+                path="/register"
+                element={
+                  <GuestOnly>
+                    <RegisterPage />
+                  </GuestOnly>
+                }
+              />
 
-              <Route element={<AppLayout />}>
+              <Route
+                element={
+                  <RequireAuth>
+                    <AppLayout />
+                  </RequireAuth>
+                }
+              >
                 <Route path="/" element={<Navigate to="/dashboard" replace />} />
                 <Route path="/dashboard" element={<DashboardPage />} />
                 <Route path="/stocks" element={<StockListPage />} />

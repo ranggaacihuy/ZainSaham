@@ -19,9 +19,28 @@ export class ApiError extends Error {
 }
 
 const OFFLINE_MESSAGE = 'Tidak dapat terhubung ke server. Periksa koneksi atau pastikan backend berjalan.';
+const TOKEN_STORAGE_KEY = 'zainsaham_token';
+
+export function getAuthToken() {
+  try {
+    return localStorage.getItem(TOKEN_STORAGE_KEY) || null;
+  } catch {
+    return null;
+  }
+}
+
+export function setAuthToken(token) {
+  try {
+    if (token) localStorage.setItem(TOKEN_STORAGE_KEY, token);
+    else localStorage.removeItem(TOKEN_STORAGE_KEY);
+  } catch {
+    // Abaikan bila localStorage tidak tersedia.
+  }
+}
 
 const DEFAULT_MESSAGES = {
   400: 'Permintaan tidak valid.',
+  401: 'Sesi telah berakhir. Silakan masuk kembali.',
   403: 'Akses ditolak.',
   404: 'Data tidak ditemukan.',
   422: 'Data yang dikirim tidak valid.',
@@ -80,6 +99,14 @@ export const api = axios.create({
     Accept: 'application/json',
     'Content-Type': 'application/json',
   },
+});
+
+api.interceptors.request.use((reqConfig) => {
+  const token = getAuthToken();
+  if (token) {
+    reqConfig.headers.Authorization = `Bearer ${token}`;
+  }
+  return reqConfig;
 });
 
 api.interceptors.response.use(

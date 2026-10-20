@@ -20,13 +20,20 @@ export function WatchlistProvider({ children }) {
   const [pendingIds, setPendingIds] = useState(() => new Set());
   const requestId = useRef(0);
   const pendingRef = useRef(new Set());
+  const userId = user?.user_id || null;
 
   const reload = useCallback(
     async ({ silent = false } = {}) => {
+      if (!userId) {
+        setItems([]);
+        setError(null);
+        setLoading(false);
+        return [];
+      }
       const id = ++requestId.current;
       if (!silent) setLoading(true);
       try {
-        const list = await getWatchlist(user.user_id);
+        const list = await getWatchlist(userId);
         if (id === requestId.current) {
           setItems(list);
           setError(null);
@@ -39,28 +46,12 @@ export function WatchlistProvider({ children }) {
         if (id === requestId.current) setLoading(false);
       }
     },
-    [user.user_id],
+    [userId],
   );
 
   useEffect(() => {
-    let active = true;
-    getWatchlist(user.user_id)
-      .then((list) => {
-        if (active) {
-          setItems(list);
-          setError(null);
-        }
-      })
-      .catch((err) => {
-        if (active) setError(err);
-      })
-      .finally(() => {
-        if (active) setLoading(false);
-      });
-    return () => {
-      active = false;
-    };
-  }, [user.user_id]);
+    reload().catch(() => {});
+  }, [reload]);
 
   const byStockId = useMemo(() => new Map(items.map((item) => [item.stock_id, item])), [items]);
 
@@ -74,7 +65,7 @@ export function WatchlistProvider({ children }) {
 
   const add = useCallback(
     async (stock) => {
-      if (!stock?.stock_id || pendingRef.current.has(stock.stock_id)) return false;
+      if (!userId || !stock?.stock_id || pendingRef.current.has(stock.stock_id)) return false;
       if (byStockId.has(stock.stock_id)) {
         addToast(`${stock.ticker} sudah ada di watchlist.`, 'info');
         return false;
@@ -87,7 +78,7 @@ export function WatchlistProvider({ children }) {
           addToast(`${stock.ticker} sudah ada di watchlist.`, 'info');
           return false;
         }
-        await addToWatchlist(user.user_id, stock.stock_id);
+        await addToWatchlist(userId, stock.stock_id);
         await reload({ silent: true }).catch(() => {});
         addToast(`${stock.ticker} ditambahkan ke watchlist.`, 'success');
         return true;
@@ -98,7 +89,7 @@ export function WatchlistProvider({ children }) {
         setPending(stock.stock_id, false);
       }
     },
-    [addToast, byStockId, reload, user.user_id],
+    [addToast, byStockId, reload, userId],
   );
 
   const remove = useCallback(
@@ -146,4 +137,3 @@ export function useWatchlist() {
   if (!context) throw new Error('useWatchlist harus dipakai di dalam WatchlistProvider');
   return context;
 }
-

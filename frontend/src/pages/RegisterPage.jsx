@@ -1,5 +1,3 @@
-// TODO: aktifkan saat backend punya auth Sanctum.
-// Halaman ini disembunyikan dari rute & navigasi selama backend belum memiliki endpoint /register.
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { LineChart } from 'lucide-react';
@@ -27,7 +25,7 @@ export default function RegisterPage() {
     setLoading(true);
     try {
       await register(name, email, password, passwordConfirmation);
-      navigate('/dashboard');
+      navigate('/dashboard', { replace: true });
     } catch (err) {
       setError(err);
     } finally {

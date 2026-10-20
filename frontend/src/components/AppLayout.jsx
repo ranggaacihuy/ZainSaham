@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { Bookmark, History, LayoutDashboard, LineChart, MessageSquareText, Search, User } from 'lucide-react';
+import { Bookmark, History, LayoutDashboard, LineChart, LogOut, MessageSquareText, Search, User } from 'lucide-react';
 import { displayName, useAuth } from '../context/AuthContext';
 import SearchModal from './SearchModal';
 
@@ -29,10 +29,15 @@ function Brand() {
 }
 
 export default function AppLayout() {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const [searchOpen, setSearchOpen] = useState(false);
+
+  const onLogout = async () => {
+    await logout();
+    navigate('/login', { replace: true });
+  };
 
   useEffect(() => {
     const onKey = (event) => {
@@ -82,9 +87,20 @@ export default function AppLayout() {
             );
           })}
         </nav>
-        <div className="border-t border-border px-5 py-4">
-          <p className="truncate text-sm font-medium text-text">{displayName(user)}</p>
-          <p className="truncate text-xs text-text-muted">{user.email || `ID pengguna ${user.user_id}`}</p>
+        <div className="flex items-center justify-between gap-2 border-t border-border px-5 py-4">
+          <div className="min-w-0">
+            <p className="truncate text-sm font-medium text-text">{displayName(user)}</p>
+            <p className="truncate text-xs text-text-muted">{user?.email || `ID pengguna ${user?.user_id}`}</p>
+          </div>
+          <button
+            type="button"
+            onClick={onLogout}
+            title="Keluar"
+            aria-label="Keluar dari akun"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-text-muted transition-colors duration-150 hover:bg-surface-2 hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          >
+            <LogOut className="h-4 w-4" aria-hidden="true" />
+          </button>
         </div>
       </aside>
 

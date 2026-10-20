@@ -1,37 +1,112 @@
-import { createContext, useContext, useMemo } from 'react';
-import config from '../config';
-import { ApiError } from '../api/client';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { loginApi, logoutApi, meApi, registerApi } from '../api/auth';
+import { getAuthToken, setAuthToken } from '../api/client';
+import { normalizeUser } from '../api/normalize';
 
 const AuthContext = createContext(null);
+const USER_STORAGE_KEY = 'zainsaham_user';
 
-// TODO: aktifkan saat backend punya auth Sanctum.
-// Backend belum punya /login, /register, /logout, maupun /me. Sampai saat itu,
-// identitas user diambil dari satu sumber terpusat: VITE_USER_ID di src/config.js.
-// Nama & email opsional (VITE_USER_NAME / VITE_USER_EMAIL) karena backend juga belum
-// punya endpoint profil user.
-function authUnavailable() {
-  return Promise.reject(
-    new ApiError({ status: 501, message: 'Autentikasi belum tersedia di backend.' }),
-  );
+function readStoredUser() {
+  try {
+    const raw = localStorage.getItem(USER_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    const user = normalizeUser(parsed);
+    return user?.user_id ? user : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredUser(user) {
+  try {
+    if (user) localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(user));
+    else localStorage.removeItem(USER_STORAGE_KEY);
+  } catch {
+    // Abaikan bila localStorage tidak tersedia.
+  }
 }
 
 export function AuthProvider({ children }) {
+  const [user, setUser] = useState(() => (getAuthToken() ? readStoredUser() : null));
+  const [loading, setLoading] = useState(() => Boolean(getAuthToken()));
+
+  const saveSession = useCallback((nextUser, token) => {
+    setAuthToken(token);
+    writeStoredUser(nextUser);
+    setUser(nextUser);
+  }, []);
+
+  const clearSession = useCallback(() => {
+    setAuthToken(null);
+    writeStoredUser(null);
+    setUser(null);
+  }, []);
+
+  useEffect(() => {
+    const token = getAuthToken();
+    if (!token) return undefined;
+
+    let cancelled = false;
+    meApi()
+      .then((freshUser) => {
+        if (!cancelled && freshUser?.user_id) {
+          writeStoredUser(freshUser);
+          setUser(freshUser);
+        }
+      })
+      .catch((err) => {
+        if (!cancelled && err?.status === 401) {
+          clearSession();
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [clearSession]);
+
+  const login = useCallback(
+    async (email, password) => {
+      const { user: loggedInUser, token } = await loginApi(email, password);
+      saveSession(loggedInUser, token);
+      return loggedInUser;
+    },
+    [saveSession],
+  );
+
+  const register = useCallback(
+    async (name, email, password, passwordConfirmation) => {
+      const { user: registeredUser, token } = await registerApi(name, email, password, passwordConfirmation);
+      saveSession(registeredUser, token);
+      return registeredUser;
+    },
+    [saveSession],
+  );
+
+  const logout = useCallback(async () => {
+    try {
+      await logoutApi();
+    } catch {
+      // Tetap bersihkan sesi lokal meskipun request logout gagal.
+    } finally {
+      clearSession();
+    }
+  }, [clearSession]);
+
   const value = useMemo(
     () => ({
-      user: {
-        user_id: config.userId,
-        name: config.userName || null,
-        email: config.userEmail || null,
-        created_at: null,
-      },
-      loading: false,
-      isAuthenticated: true,
-      // Antarmuka dipertahankan untuk halaman Login/Register yang sedang disembunyikan.
-      login: authUnavailable,
-      register: authUnavailable,
-      logout: authUnavailable,
+      user,
+      loading,
+      isAuthenticated: Boolean(user?.user_id),
+      login,
+      register,
+      logout,
     }),
-    [],
+    [user, loading, login, register, logout],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
@@ -44,7 +119,7 @@ export function useAuth() {
   return context;
 }
 
-/** Nama tampilan user: nama dari konfigurasi, atau "Pengguna #ID". */
+/** Nama tampilan user: nama akun atau "Pengguna #ID". */
 // oxlint-disable-next-line react/only-export-components
 export function displayName(user) {
   return user?.name || `Pengguna #${user?.user_id ?? '-'}`;

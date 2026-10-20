@@ -1,7 +1,5 @@
-// TODO: aktifkan saat backend punya auth Sanctum.
-// Halaman ini disembunyikan dari rute & navigasi selama backend belum memiliki endpoint /login.
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { LineChart } from 'lucide-react';
 import { Button, Card, Field, Input } from '../components/ui';
 import { useAuth } from '../context/AuthContext';
@@ -10,10 +8,13 @@ import { fieldError } from '../api/client';
 export default function LoginPage() {
   const { login } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
+
+  const from = location.state?.from?.pathname || '/dashboard';
 
   const onSubmit = async (event) => {
     event.preventDefault();
@@ -21,7 +22,7 @@ export default function LoginPage() {
     setLoading(true);
     try {
       await login(email, password);
-      navigate('/dashboard');
+      navigate(from, { replace: true });
     } catch (err) {
       setError(err);
     } finally {

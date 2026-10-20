@@ -33,6 +33,16 @@ function toText(value) {
   }
 }
 
+export function normalizeUser(raw) {
+  if (!raw) return null;
+  return {
+    user_id: toId(raw.user_id),
+    name: raw.name ?? '',
+    email: raw.email ?? '',
+    created_at: raw.created_at ?? null,
+  };
+}
+
 export function normalizeStock(raw) {
   if (!raw) return null;
   return {
