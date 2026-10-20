@@ -1,0 +1,62 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --color-stabilo: #CCFF00;
+    --color-stabilo-hover: #b8e600;
+    --color-stabilo-muted: rgba(204, 255, 0, 0.15);
+    --color-stabilo-border: rgba(204, 255, 0, 0.35);
+  }
+
+  body {
+    background-color: #080C14;
+    color: #F1F5F9;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #0B101B;
+}
+::-webkit-scrollbar-thumb {
+  background: #1E293B;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #CCFF00;
+}
+
+/* Stabilo glow effects */
+.glow-stabilo {
+  box-shadow: 0 0 25px -4px rgba(204, 255, 0, 0.35);
+}
+
+.glow-stabilo-sm {
+  box-shadow: 0 0 12px -2px rgba(204, 255, 0, 0.25);
+}
+
+.text-stabilo {
+  color: #CCFF00;
+}
+
+.bg-stabilo {
+  background-color: #CCFF00;
+  color: #090D14;
+}
+
+.border-stabilo {
+  border-color: #CCFF00;
+}
+
+.badge-stabilo {
+  background-color: rgba(204, 255, 0, 0.12);
+  color: #CCFF00;
+  border: 1px solid rgba(204, 255, 0, 0.3);
+}
