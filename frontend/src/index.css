@@ -1,0 +1,87 @@
+@import "tailwindcss";
+@import "@fontsource-variable/inter";
+
+/* Token desain ZainSaham. Pakai lewat utilitas Tailwind: bg-surface, text-text-muted, border-border, dst. */
+@theme {
+  --color-bg: #0A0F18;
+  --color-surface: #0F1623;
+  --color-surface-2: #141C2B;
+  --color-border: #1F2A3C;
+  --color-text: #E6EBF2;
+  --color-text-muted: #8A97AB;
+  --color-accent: #CCFF00;
+  --color-accent-hover: #B8E600;
+  --color-accent-ink: #0A0F18;
+  --color-up: #34D399;
+  --color-down: #F87171;
+  --color-warn: #FBBF24;
+
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+
+  /* Skala tipografi: 12 / 14 / 16 / 20 / 28 */
+  --text-xs: 0.75rem;
+  --text-xs--line-height: 1rem;
+  --text-sm: 0.875rem;
+  --text-sm--line-height: 1.25rem;
+  --text-base: 1rem;
+  --text-base--line-height: 1.5rem;
+  --text-xl: 1.25rem;
+  --text-xl--line-height: 1.75rem;
+  --text-display: 1.75rem;
+  --text-display--line-height: 2.25rem;
+}
+
+@layer base {
+  *,
+  ::before,
+  ::after {
+    border-color: var(--color-border);
+  }
+
+  html {
+    color-scheme: dark;
+  }
+
+  body {
+    background-color: var(--color-bg);
+    color: var(--color-text);
+    font-family: var(--font-sans);
+    font-size: var(--text-sm);
+    line-height: var(--text-sm--line-height);
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  button,
+  [role='button'] {
+    cursor: pointer;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+}
+
+@layer utilities {
+  /* Angka selalu bertabular agar rata. */
+  .num {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* Scrollbar tipis dan netral */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border) transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
