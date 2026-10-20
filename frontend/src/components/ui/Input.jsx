@@ -1,5 +1,5 @@
-import { forwardRef } from 'react';
-import { ChevronDown } from 'lucide-react';
+import { forwardRef, useState } from 'react';
+import { ChevronDown, Eye, EyeOff } from 'lucide-react';
 
 export const controlClass =
   'w-full rounded-lg border border-border bg-bg text-sm text-text placeholder:text-text-muted ' +
@@ -7,7 +7,11 @@ export const controlClass =
   'focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent ' +
   'disabled:opacity-50';
 
-export const Input = forwardRef(function Input({ icon: Icon, className = '', wrapperClassName = '', ...props }, ref) {
+export const Input = forwardRef(function Input({ icon: Icon, type, className = '', wrapperClassName = '', ...props }, ref) {
+  const [showPassword, setShowPassword] = useState(false);
+  const isPassword = type === 'password';
+  const inputType = isPassword && showPassword ? 'text' : type;
+
   return (
     <div className={`relative ${wrapperClassName}`}>
       {Icon && (
@@ -16,7 +20,23 @@ export const Input = forwardRef(function Input({ icon: Icon, className = '', wra
           aria-hidden="true"
         />
       )}
-      <input ref={ref} className={`${controlClass} h-9 ${Icon ? 'pl-9' : 'pl-3'} pr-3 ${className}`} {...props} />
+      <input
+        ref={ref}
+        type={inputType}
+        className={`${controlClass} h-9 ${Icon ? 'pl-9' : 'pl-3'} ${isPassword ? 'pr-9' : 'pr-3'} ${className}`}
+        {...props}
+      />
+      {isPassword && (
+        <button
+          type="button"
+          onClick={() => setShowPassword((prev) => !prev)}
+          aria-label={showPassword ? 'Sembunyikan kata sandi' : 'Tampilkan kata sandi'}
+          title={showPassword ? 'Sembunyikan kata sandi' : 'Tampilkan kata sandi'}
+          className="absolute right-2 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded text-text-muted transition-colors duration-150 hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        >
+          {showPassword ? <EyeOff className="h-4 w-4" aria-hidden="true" /> : <Eye className="h-4 w-4" aria-hidden="true" />}
+        </button>
+      )}
     </div>
   );
 });
