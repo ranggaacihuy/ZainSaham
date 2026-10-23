@@ -151,7 +151,7 @@ class StockService
      */
     public function addToWatchlist($userId, $stockId)
     {
-        return Watchlist::create([
+        return Watchlist::firstOrCreate([
             'user_id' => $userId,
             'stock_id' => $stockId,
         ]);
@@ -160,9 +160,11 @@ class StockService
     /**
      * Menghapus saham dari watchlist.
      */
-    public function removeFromWatchlist($watchlistId)
+    public function removeFromWatchlist($watchlistId, $userId)
     {
-        $watchlist = Watchlist::findOrFail($watchlistId);
+        $watchlist = Watchlist::where('watchlist_id', $watchlistId)
+            ->where('user_id', $userId)
+            ->firstOrFail();
 
         $watchlist->delete();
 

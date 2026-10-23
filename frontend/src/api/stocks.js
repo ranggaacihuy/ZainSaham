@@ -48,6 +48,17 @@ export function getPrices(stockId, options) {
 }
 export const peekPrices = (stockId) => pricesCache.peek(Number(stockId));
 
+export async function getQuote(stockId) {
+  const res = await api.get(`/stocks/${stockId}/quote`);
+  const data = unwrap(res);
+  return {
+    price: data?.price ? normalizePrice(data.price) : null,
+    is_open: Boolean(data?.is_open),
+    market_time: data?.market_time ?? null,
+    fetched_at: data?.fetched_at ?? null,
+  };
+}
+
 // GET /stocks/{stockId}/indicators — urut lama → baru, nilai bisa null.
 export function getIndicators(stockId, options) {
   return indicatorsCache.get(Number(stockId), options);

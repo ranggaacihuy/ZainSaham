@@ -9,6 +9,7 @@ import NewsModal from '../components/NewsModal';
 import NotFound from '../components/NotFound';
 import WatchlistButton from '../components/WatchlistButton';
 import useAsync from '../hooks/useAsync';
+import useLiveQuote from '../hooks/useLiveQuote';
 import { getByTicker, loadStocks } from '../lib/stocksStore';
 import { getFundamentals, getIndicators, getNews, getPrices } from '../api/stocks';
 import { RANGES, classifyPeriods, describeIndicators, filterByRange, summarizePrices } from '../lib/market';
@@ -22,6 +23,17 @@ const TABS = [
 ];
 
 const toneText = { up: 'text-up', down: 'text-down', neutral: 'text-text-muted' };
+
+function mergePrice(list, price) {
+  if (!Array.isArray(list) || !price?.price_date || price.close_price === null) return list;
+  const last = list[list.length - 1];
+  if (last && last.price_date > price.price_date) return list;
+  if (last?.price_date === price.price_date) {
+    const same = ['open_price', 'high_price', 'low_price', 'close_price', 'volume'].every((key) => last[key] === price[key]);
+    return same ? list : [...list.slice(0, -1), price];
+  }
+  return [...list, price];
+}
 
 function rangeNote(result) {
   if (!result?.isPartial || !result.since) return null;
@@ -38,7 +50,7 @@ function HeaderSkeleton() {
   );
 }
 
-function PriceHeader({ stock, prices }) {
+function PriceHeader({ stock, prices, live }) {
   const summary = prices.data ? summarizePrices(prices.data) : null;
   const tone = toneOf(summary?.change_pct);
 
@@ -79,6 +91,22 @@ function PriceHeader({ stock, prices }) {
                   <dt className="sr-only">Tanggal data</dt>
                   <dd>Data per {date(summary.date)}</dd>
                 </div>
+                {live.updatedAt && (
+                  <div className="flex items-center gap-1.5" aria-live="polite">
+                    <dt className="sr-only">Status pasar</dt>
+                    <dd className="flex items-center gap-1.5">
+                      {live.isOpen ? (
+                        <>
+                          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-up" aria-hidden="true" />
+                          <span className="text-up">Live</span>
+                        </>
+                      ) : (
+                        <span>Pasar tutup</span>
+                      )}
+                      <span>· {dateTime(live.updatedAt)}</span>
+                    </dd>
+                  </div>
+                )}
               </dl>
             </>
           )}
@@ -226,6 +254,18 @@ export default function StockDetailPage() {
   );
   const stock = stockState.data;
   const prices = useAsync((opts) => getPrices(stock.stock_id, opts), [stock?.stock_id], { enabled: Boolean(stock) });
+  const { setData: setPrices } = prices;
+  const live = useLiveQuote(prices.data ? stock?.stock_id : null, (price) => {
+    const last = prices.data?.[prices.data.length - 1];
+    if (last && price.price_date > last.price_date) {
+      getPrices(stock.stock_id, { force: true }).then(
+        (fresh) => setPrices(mergePrice(fresh, price)),
+        () => setPrices((prev) => mergePrice(prev, price)),
+      );
+      return;
+    }
+    setPrices((prev) => mergePrice(prev, price));
+  });
 
   const setTab = (value) => {
     const next = new URLSearchParams(searchParams);
@@ -276,7 +316,7 @@ export default function StockDetailPage() {
   return (
     <>
       {backLink}
-      <PriceHeader stock={stock} prices={prices} />
+      <PriceHeader stock={stock} prices={prices} live={live} />
 
       <Tabs items={TABS} value={tab} onChange={setTab} label="Bagian detail saham" className="mb-4" />
 

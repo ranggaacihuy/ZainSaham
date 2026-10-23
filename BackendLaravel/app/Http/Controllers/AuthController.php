@@ -4,11 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\User;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Schema;
-use Laravel\Sanctum\PersonalAccessToken;
-use Throwable;
 
 class AuthController extends Controller
 {
@@ -77,18 +73,9 @@ class AuthController extends Controller
      */
     public function me(Request $request)
     {
-        $user = $this->resolveUserFromRequest($request);
-
-        if (!$user) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Sesi telah berakhir. Silakan masuk kembali.',
-            ], 401);
-        }
-
         return response()->json([
             'success' => true,
-            'data' => $user,
+            'data' => $request->user(),
         ]);
     }
 
@@ -97,12 +84,7 @@ class AuthController extends Controller
      */
     public function logout(Request $request)
     {
-        $bearer = $request->bearerToken();
-
-        if ($bearer && $this->hasSanctumTable()) {
-            $accessToken = PersonalAccessToken::findToken($bearer);
-            $accessToken?->delete();
-        }
+        $request->user()->currentAccessToken()?->delete();
 
         return response()->json([
             'success' => true,
@@ -112,64 +94,15 @@ class AuthController extends Controller
 
     protected function verifyPassword(string $plain, string $storedHash): bool
     {
-        if ($storedHash === '') {
+        if ($storedHash === '' || empty(password_get_info($storedHash)['algo'])) {
             return false;
         }
 
-        $info = password_get_info($storedHash);
-        if (!empty($info['algo'])) {
-            return Hash::check($plain, $storedHash);
-        }
-
-        // Fallback untuk data seed manual yang belum di-hash (mis. dummy_password).
-        return hash_equals($storedHash, $plain);
+        return Hash::check($plain, $storedHash);
     }
 
     protected function issueToken(User $user): string
     {
-        if ($this->hasSanctumTable()) {
-            return $user->createToken('auth_token')->plainTextToken;
-        }
-
-        return Crypt::encryptString(json_encode([
-            'user_id' => $user->user_id,
-            'iat' => now()->timestamp,
-        ]));
-    }
-
-    protected function resolveUserFromRequest(Request $request): ?User
-    {
-        $bearer = $request->bearerToken();
-        if (!$bearer) {
-            return null;
-        }
-
-        if ($this->hasSanctumTable() && str_contains($bearer, '|')) {
-            $accessToken = PersonalAccessToken::findToken($bearer);
-            if ($accessToken && $accessToken->tokenable instanceof User) {
-                return $accessToken->tokenable;
-            }
-        }
-
-        try {
-            $payload = json_decode(Crypt::decryptString($bearer), true);
-            if (is_array($payload) && !empty($payload['user_id'])) {
-                return User::find($payload['user_id']);
-            }
-        } catch (Throwable) {
-            return null;
-        }
-
-        return null;
-    }
-
-    protected function hasSanctumTable(): bool
-    {
-        try {
-            return Schema::hasTable('personal_access_tokens');
-        } catch (Throwable) {
-            return false;
-        }
+        return $user->createToken('auth_token')->plainTextToken;
     }
 }
-

@@ -2,8 +2,11 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Stock;
+use App\Services\MarketDataService;
 use App\Services\StockService;
 use Illuminate\Http\Request;
+use Throwable;
 
 class StockController extends Controller
 {
@@ -47,6 +50,27 @@ class StockController extends Controller
         ]);
     }
 
+    public function quote(MarketDataService $market, $stockId)
+    {
+        $stock = Stock::findOrFail($stockId);
+
+        try {
+            $quote = $market->quote($stock);
+        } catch (Throwable $e) {
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Data harga realtime belum dapat diambil dari Yahoo Finance.',
+            ], 502);
+        }
+
+        return response()->json([
+            'success' => true,
+            'data' => $quote,
+        ]);
+    }
+
     // GET /api/stocks/{stockId}/indicators
     public function indicators($stockId)
     {
@@ -83,8 +107,10 @@ class StockController extends Controller
     }
 
     // GET /api/users/{userId}/watchlist
-    public function watchlist($userId)
+    public function watchlist(Request $request, $userId)
     {
+        abort_unless((int) $userId === $request->user()->user_id, 403, 'Akses ditolak.');
+
         $watchlists = $this->stockService
             ->getWatchlistByUserId($userId);
 
@@ -104,6 +130,8 @@ class StockController extends Controller
             'stock_id' => 'required|integer|exists:stocks,stock_id',
         ]);
 
+        abort_unless((int) $validated['user_id'] === $request->user()->user_id, 403, 'Akses ditolak.');
+
         $watchlist = $this->stockService->addToWatchlist(
             $validated['user_id'],
             $validated['stock_id']
@@ -119,9 +147,9 @@ class StockController extends Controller
     /**
      * DELETE /api/watchlists/{watchlistId}
      */
-    public function removeFromWatchlist($watchlistId)
+    public function removeFromWatchlist(Request $request, $watchlistId)
     {
-        $this->stockService->removeFromWatchlist($watchlistId);
+        $this->stockService->removeFromWatchlist($watchlistId, $request->user()->user_id);
 
         return response()->json([
             'success' => true,

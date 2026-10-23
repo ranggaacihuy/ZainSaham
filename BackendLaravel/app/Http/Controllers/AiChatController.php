@@ -2,28 +2,30 @@
 
 namespace App\Http\Controllers;
 
+use App\Exceptions\GeminiException;
 use App\Models\AiMessage;
 use App\Models\AnalysisSession;
 use App\Models\Stock;
 use App\Services\AiAnalysisService;
 use App\Services\GeminiChatService;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Carbon;
-use Illuminate\Validation\Rule;
-use RuntimeException;
 use Throwable;
 
 class AiChatController extends Controller
 {
+    private const HISTORY_LIMIT = 20;
+
     public function __construct(
         protected GeminiChatService $geminiChatService,
         protected AiAnalysisService $aiAnalysisService
     ) {}
 
-    public function messages($sessionId)
+    public function messages(Request $request, $sessionId)
     {
-        $session = AnalysisSession::find($sessionId);
+        $session = AnalysisSession::where('session_id', $sessionId)
+            ->where('user_id', $request->user()->user_id)
+            ->first();
 
         if (!$session) {
             return response()->json([
@@ -66,6 +68,8 @@ class AiChatController extends Controller
             ],
         ]);
 
+        abort_unless((int) $validated['user_id'] === $request->user()->user_id, 403, 'Akses ditolak.');
+
         $session = null;
 
         if (!empty($validated['session_id'])) {
@@ -95,17 +99,20 @@ class AiChatController extends Controller
         }
 
         // Ambil data saham untuk konteks jawaban AI.
-        $stockContext = $this->aiAnalysisService->analyze(
-            $validated['stock_id']
+        $stockContext = $this->aiAnalysisService->buildContext(
+            (int) $validated['stock_id'],
+            'combined'
         );
 
         $history = AiMessage::where(
             'session_id',
             $session->session_id
         )
-            ->orderBy('created_at')
-            ->orderBy('message_id')
-            ->get();
+            ->orderByDesc('created_at')
+            ->orderByDesc('message_id')
+            ->limit(self::HISTORY_LIMIT)
+            ->get()
+            ->reverse();
 
         // Simpan pesan pengguna terlebih dahulu.
         AiMessage::create([
@@ -136,7 +143,9 @@ class AiChatController extends Controller
 
             return response()->json([
                 'success' => false,
-                'message' => 'AI belum dapat membalas. Silakan coba lagi.',
+                'message' => $e instanceof GeminiException
+                    ? $e->userMessage
+                    : 'AI belum dapat membalas. Silakan coba lagi.',
                 'data' => [
                     'session_id' => $session->session_id,
                 ],
