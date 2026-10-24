@@ -3,7 +3,6 @@ import MarkdownText from './MarkdownText';
 import { analysisTypeLabel } from '../api/ai';
 import { dateTime } from '../lib/format';
 
-/** Hasil analisis AI: teks apa adanya (markdown sederhana), model, waktu, dan satu baris disclaimer. */
 export default function AnalysisResult({ analysis, ticker, companyName }) {
   return (
     <article>
@@ -24,4 +23,3 @@ export default function AnalysisResult({ analysis, ticker, companyName }) {
     </article>
   );
 }
-

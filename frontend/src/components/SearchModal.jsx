@@ -7,7 +7,6 @@ import useAsync from '../hooks/useAsync';
 
 const MAX_RESULTS = 8;
 
-/** Pencarian saham global (Ctrl K) dari stocksStore. */
 export default function SearchModal({ open, onClose }) {
   const navigate = useNavigate();
   const inputRef = useRef(null);

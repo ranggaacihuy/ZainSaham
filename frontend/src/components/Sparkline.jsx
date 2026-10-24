@@ -1,4 +1,3 @@
-/** Sparkline kecil. Warna mengikuti arah harga di jendela data (naik = up, turun = down). */
 export default function Sparkline({ values = [], width = 96, height = 28, className = '' }) {
   const points = values.filter((v) => typeof v === 'number' && Number.isFinite(v));
   if (points.length < 2) {
@@ -25,4 +24,3 @@ export default function Sparkline({ values = [], width = 96, height = 28, classN
     </svg>
   );
 }
-

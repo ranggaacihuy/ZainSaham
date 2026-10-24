@@ -20,6 +20,7 @@ export async function getDashboard() {
   const stats = data.stats || {};
   return {
     lastPriceDate: toDateKey(data.last_price_date),
+    index: data.index ? normalizeMover(data.index) : null,
     stats: {
       count: toNumber(stats.count) ?? 0,
       avgChangePct: toNumber(stats.avg_change_pct),

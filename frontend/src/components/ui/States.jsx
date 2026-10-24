@@ -5,7 +5,6 @@ export function Skeleton({ className = '', style }) {
   return <div aria-hidden="true" className={`animate-pulse rounded-md bg-surface-2 ${className}`} style={style} />;
 }
 
-/** Beberapa baris skeleton untuk blok teks. */
 export function SkeletonText({ lines = 3, className = '' }) {
   return (
     <div className={`space-y-2 ${className}`} aria-hidden="true">
@@ -16,7 +15,6 @@ export function SkeletonText({ lines = 3, className = '' }) {
   );
 }
 
-/** Empty state: satu kalimat + satu aksi. */
 export function EmptyState({ message, action, className = '' }) {
   return (
     <div className={`flex flex-col items-center justify-center gap-3 px-4 py-10 text-center ${className}`}>
@@ -26,7 +24,6 @@ export function EmptyState({ message, action, className = '' }) {
   );
 }
 
-/** Error state: pesan + "Coba lagi". */
 export function ErrorState({ error, message, onRetry, className = '', compact = false }) {
   const text = message || error?.message || 'Gagal memuat data.';
   if (compact) {
@@ -65,4 +62,3 @@ export function PageHeader({ title, description, actions, children }) {
     </div>
   );
 }
-

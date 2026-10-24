@@ -1,9 +1,3 @@
-// Perhitungan pasar di sisi frontend untuk grafik dan halaman detail saham.
-
-/**
- * Ringkasan harga dari array harga (urut lama → baru).
- * Perubahan dihitung dari dua data terakhir.
- */
 export function summarizePrices(prices) {
   if (!Array.isArray(prices) || prices.length === 0) return null;
   const last = prices[prices.length - 1];
@@ -26,44 +20,64 @@ export function summarizePrices(prices) {
   };
 }
 
-export const RANGES = [
-  { value: '1B', label: '1B', months: 1 },
-  { value: '3B', label: '3B', months: 3 },
-  { value: '6B', label: '6B', months: 6 },
-  { value: '1T', label: '1T', months: 12 },
-  { value: '5T', label: '5T', months: 60 },
-];
-
-function subtractMonths(dateKey, months) {
+function weekStart(dateKey) {
   const [y, m, d] = dateKey.split('-').map(Number);
-  const date = new Date(Date.UTC(y, m - 1 - months, d));
+  const date = new Date(Date.UTC(y, m - 1, d));
+  date.setUTCDate(date.getUTCDate() - ((date.getUTCDay() + 6) % 7));
   return date.toISOString().slice(0, 10);
 }
 
-/**
- * Filter array berurutan berdasarkan rentang waktu, dihitung mundur dari data terakhir.
- * Mengembalikan { items, isPartial, since } — isPartial true bila data lebih pendek dari rentang.
- */
-export function filterByRange(items, range, dateField = 'price_date') {
-  if (!Array.isArray(items) || items.length === 0) {
-    return { items: [], isPartial: false, since: null };
-  }
-  const option = RANGES.find((r) => r.value === range) || RANGES[1];
-  const lastKey = items[items.length - 1][dateField];
-  const firstKey = items[0][dateField];
-  const cutoff = subtractMonths(lastKey, option.months);
-  const filtered = items.filter((item) => item[dateField] >= cutoff);
-  return {
-    items: filtered,
-    isPartial: firstKey > cutoff,
-    since: firstKey,
+function monthBucket(months) {
+  return (dateKey) => {
+    const [y, m] = dateKey.split('-').map(Number);
+    return `${y}-${Math.floor((m - 1) / months)}`;
   };
 }
 
-/**
- * Deskripsi indikator teknikal terakhir.
- * tone: 'up' | 'down' | 'warn' | 'neutral'
- */
+export const TIMEFRAMES = [
+  { value: '1H', label: '1H', title: '1 hari', bucket: (dateKey) => dateKey },
+  { value: '1Mg', label: '1Mg', title: '1 minggu', bucket: weekStart },
+  { value: '1B', label: '1B', title: '1 bulan', bucket: monthBucket(1) },
+  { value: '3B', label: '3B', title: '3 bulan', bucket: monthBucket(3) },
+  { value: '6B', label: '6B', title: '6 bulan', bucket: monthBucket(6) },
+  { value: '1T', label: '1T', title: '1 tahun', bucket: monthBucket(12) },
+];
+
+export function aggregatePrices(prices, timeframe) {
+  if (!Array.isArray(prices)) return [];
+  const option = TIMEFRAMES.find((t) => t.value === timeframe) || TIMEFRAMES[0];
+  if (option === TIMEFRAMES[0]) return prices;
+
+  const bars = [];
+  let key = null;
+  prices.forEach((p) => {
+    const open = p.open_price ?? p.close_price;
+    const high = p.high_price ?? Math.max(open, p.close_price);
+    const low = p.low_price ?? Math.min(open, p.close_price);
+    const bucket = option.bucket(p.price_date);
+
+    if (bucket !== key) {
+      key = bucket;
+      bars.push({
+        price_date: p.price_date,
+        open_price: open,
+        high_price: high,
+        low_price: low,
+        close_price: p.close_price,
+        volume: p.volume ?? 0,
+      });
+      return;
+    }
+
+    const bar = bars[bars.length - 1];
+    bar.high_price = Math.max(bar.high_price, high);
+    bar.low_price = Math.min(bar.low_price, low);
+    bar.close_price = p.close_price;
+    bar.volume += p.volume ?? 0;
+  });
+  return bars;
+}
+
 export function describeIndicators(indicator, lastClose) {
   const rsi = indicator?.rsi_14 ?? null;
   const macd = indicator?.macd ?? null;
@@ -99,11 +113,6 @@ export function describeIndicators(indicator, lastClose) {
   return { date: indicator?.indicator_date ?? null, rsi: rsiInfo, macd: macdInfo, sma: smaInfo };
 }
 
-/**
- * Klasifikasi periode fundamental berdasarkan `period_type` dari backend (atau pola teks bila kosong).
- * Toggle kuartalan/tahunan hanya ditampilkan bila SEMUA periode bisa diklasifikasikan
- * dan kedua jenis memang ada. Selain itu tampilkan semua periode apa adanya.
- */
 const ANNUAL_PATTERN = /^(FY\s?)?\d{4}$/i;
 const QUARTER_PATTERN = /^(\d{4}[\s\-/]?Q[1-4]|Q[1-4][\s\-/]?\d{4})$/i;
 
@@ -134,4 +143,3 @@ export function classifyPeriods(fundamentals) {
     annual,
   };
 }
-

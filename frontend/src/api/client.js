@@ -1,13 +1,6 @@
 import axios from 'axios';
 import config from '../config';
 
-/**
- * Bentuk error seragam untuk seluruh aplikasi.
- * - status: kode HTTP (0 bila tidak ada respons, mis. jaringan putus / timeout)
- * - message: pesan yang aman ditampilkan ke pengguna (Bahasa Indonesia)
- * - fieldErrors: objek { field: [pesan] } dari validasi 422
- * - data: payload `data` dari respons error (mis. session_id pada 502 /ai-chat)
- */
 export class ApiError extends Error {
   constructor({ status = 0, message, fieldErrors = {}, data = null }) {
     super(message);
@@ -33,9 +26,7 @@ export function setAuthToken(token) {
   try {
     if (token) localStorage.setItem(TOKEN_STORAGE_KEY, token);
     else localStorage.removeItem(TOKEN_STORAGE_KEY);
-  } catch {
-    // Abaikan bila localStorage tidak tersedia.
-  }
+  } catch {}
 }
 
 const DEFAULT_MESSAGES = {
@@ -71,7 +62,6 @@ function toApiError(error) {
   const body = response.data;
   const isJson = body !== null && typeof body === 'object';
 
-  // Respons non-JSON pada 5xx biasanya berarti proxy Vite gagal menghubungi backend.
   if (!isJson) {
     return new ApiError({
       status,
@@ -79,8 +69,6 @@ function toApiError(error) {
     });
   }
 
-  // Pesan dari controller ZainSaham ({ success: false, message }) sudah berbahasa Indonesia.
-  // Respons error tanpa `success: false` (mis. dari proxy) memakai pesan default.
   const ownMessage = body.success === false && typeof body.message === 'string' ? body.message : null;
   const fallback = DEFAULT_MESSAGES[status] || (status >= 500 ? DEFAULT_MESSAGES[500] : 'Permintaan gagal.');
 
@@ -114,7 +102,6 @@ api.interceptors.response.use(
   (error) => Promise.reject(toApiError(error)),
 );
 
-/** Ambil `data` dari respons `{ success, data }`. */
 export function unwrap(response) {
   const body = response?.data;
   if (!body || typeof body !== 'object') {
@@ -130,13 +117,6 @@ export function unwrap(response) {
   return body.data;
 }
 
-/** Pesan error yang aman ditampilkan (untuk toast / state error). */
-export function errorMessage(error, fallback = 'Terjadi kesalahan.') {
-  if (!error) return fallback;
-  return error.message || fallback;
-}
-
-/** Pesan validasi pertama untuk field tertentu (422). */
 export function fieldError(error, field) {
   const list = error?.fieldErrors?.[field];
   return Array.isArray(list) && list.length > 0 ? list[0] : null;

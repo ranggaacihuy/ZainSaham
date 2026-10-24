@@ -288,3 +288,34 @@ func TestReanalysisAndChatTouchSessionTimestamp(t *testing.T) {
 		t.Fatalf("updated_at tidak diperbarui: %v", session.UpdatedAt)
 	}
 }
+
+func TestIndexIsSeparatedFromStocks(t *testing.T) {
+	e := newEnv(t)
+	user := testutil.User(t, e.db, "budi@example.test")
+	token := testutil.Token(t, e.db, user)
+	testutil.StockWithMarketData(t, e.db, "BBCA", 40, 0)
+	index := testutil.StockWithMarketData(t, e.db, "IHSG", 40, 0)
+	e.db.Model(index).Updates(map[string]any{"kind": models.KindIndex, "sector": "Indeks", "yahoo_symbol": "^JKSE"})
+
+	e.call(http.MethodGet, "/api/stocks", "", nil).assertCount("data", 2)
+	e.call(http.MethodGet, "/api/stocks?page=1", "", nil).
+		assertPath("meta.total", 1).
+		assertPath("data.0.ticker", "BBCA").
+		assertPath("data.0.kind", "stock").
+		assertCount("meta.sectors", 1)
+	e.call(http.MethodGet, "/api/stocks?page=1&kind=index", "", nil).assertPath("data.0.ticker", "IHSG")
+	e.call(http.MethodGet, "/api/stocks?page=1&kind=all", "", nil).assertPath("meta.total", 2)
+
+	dash := e.call(http.MethodGet, "/api/dashboard", token, nil).
+		assertStatus(http.StatusOK).
+		assertPath("data.index.stock.ticker", "IHSG").
+		assertCount("data.index.summary.sparkline", 30)
+
+	for _, group := range []string{"gainers", "losers"} {
+		for _, item := range dash.get("data.movers." + group).([]any) {
+			if item.(map[string]any)["stock"].(map[string]any)["ticker"] == "IHSG" {
+				t.Fatal("IHSG tidak boleh masuk top movers")
+			}
+		}
+	}
+}

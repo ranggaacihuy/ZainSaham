@@ -1,3 +1,4 @@
+import { Suspense, lazy } from 'react';
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { ToastProvider } from './context/ToastContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
@@ -6,13 +7,20 @@ import AppLayout from './components/AppLayout';
 import NotFound from './components/NotFound';
 import DashboardPage from './pages/DashboardPage';
 import StockListPage from './pages/StockListPage';
-import StockDetailPage from './pages/StockDetailPage';
 import WatchlistPage from './pages/WatchlistPage';
 import AiAnalysisPage from './pages/AiAnalysisPage';
 import AnalysisHistoryPage from './pages/AnalysisHistoryPage';
 import ProfilePage from './pages/ProfilePage';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
+
+const StockDetailPage = lazy(() => import('./pages/StockDetailPage'));
+
+const stockDetail = (
+  <Suspense fallback={null}>
+    <StockDetailPage />
+  </Suspense>
+);
 
 function RequireAuth({ children }) {
   const { isAuthenticated, loading } = useAuth();
@@ -75,8 +83,8 @@ export default function App() {
                 <Route path="/" element={<Navigate to="/dashboard" replace />} />
                 <Route path="/dashboard" element={<DashboardPage />} />
                 <Route path="/stocks" element={<StockListPage />} />
-                <Route path="/stocks/:ticker" element={<StockDetailPage />} />
-                <Route path="/saham/:ticker" element={<StockDetailPage />} />
+                <Route path="/stocks/:ticker" element={stockDetail} />
+                <Route path="/saham/:ticker" element={stockDetail} />
                 <Route path="/watchlist" element={<WatchlistPage />} />
                 <Route path="/ai-analysis" element={<AiAnalysisPage />} />
                 <Route path="/analysis-history" element={<AnalysisHistoryPage />} />

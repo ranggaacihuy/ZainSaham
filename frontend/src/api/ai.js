@@ -9,7 +9,6 @@ import {
   normalizeStock,
 } from './normalize';
 
-/** Jenis analisis yang dikirim ke backend. "Menyeluruh" di UI dikirim sebagai `combined`. */
 export const ANALYSIS_TYPES = [
   { value: 'teknikal', label: 'Teknikal' },
   { value: 'fundamental', label: 'Fundamental' },
@@ -21,7 +20,6 @@ export function analysisTypeLabel(value) {
   return ANALYSIS_TYPES.find((t) => t.value === value)?.label || value || '–';
 }
 
-// POST /ai-analysis → { session, analysis }
 export async function analyze({ userId, stockId, analysisType, sessionId }) {
   const body = { user_id: userId, stock_id: stockId, analysis_type: analysisType };
   if (sessionId) body.session_id = sessionId;
@@ -32,8 +30,6 @@ export async function analyze({ userId, stockId, analysisType, sessionId }) {
   return { session, analysis };
 }
 
-// POST /ai-chat → { session_id, stock, user_message, assistant_message }
-// 502: Gemini gagal (error.data.session_id tetap dikirim). 403: sesi tidak cocok.
 export async function chat({ userId, stockId, sessionId, message }) {
   const body = { user_id: userId, stock_id: stockId, message };
   if (sessionId) body.session_id = sessionId;
@@ -47,7 +43,6 @@ export async function chat({ userId, stockId, sessionId, message }) {
   };
 }
 
-// GET /ai-chat/{sessionId}/messages — urut kronologis.
 export async function chatMessages(sessionId) {
   const res = await api.get(`/ai-chat/${sessionId}/messages`);
   return normalizeList(unwrap(res), normalizeMessage);

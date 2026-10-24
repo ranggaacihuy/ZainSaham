@@ -1,8 +1,3 @@
-/**
- * Cache in-memory sederhana berbasis promise.
- * - Permintaan yang sama untuk key yang sama hanya dikirim sekali (dedup).
- * - Hasil disimpan selama `ttl` ms. Error tidak disimpan.
- */
 export function createCache(fetcher, { ttl = 5 * 60 * 1000 } = {}) {
   const store = new Map();
 
@@ -28,17 +23,5 @@ export function createCache(fetcher, { ttl = 5 * 60 * 1000 } = {}) {
     return entry.promise;
   }
 
-  function peek(key) {
-    const hit = store.get(key);
-    if (!hit || hit.status !== 'done') return undefined;
-    if (Date.now() - hit.time >= ttl) return undefined;
-    return hit.value;
-  }
-
-  function invalidate(key) {
-    if (key === undefined) store.clear();
-    else store.delete(key);
-  }
-
-  return { get, peek, invalidate };
+  return { get };
 }

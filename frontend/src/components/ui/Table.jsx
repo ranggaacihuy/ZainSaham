@@ -1,7 +1,3 @@
-/**
- * Satu-satunya gaya tabel: header 12px muted, baris 44px, garis tipis, tanpa zebra.
- * Bungkus dengan <TableWrap> agar tabel bisa di-scroll di dalam wadahnya.
- */
 export function TableWrap({ children, className = '', maxHeight }) {
   return (
     <div className={`overflow-x-auto ${maxHeight ? 'overflow-y-auto' : ''} ${className}`} style={maxHeight ? { maxHeight } : undefined}>
@@ -55,4 +51,3 @@ export function Td({ children, align = 'left', num = false, className = '', ...p
     </td>
   );
 }
-

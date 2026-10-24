@@ -17,12 +17,6 @@ function toBubble(message) {
   return { ...message, key: message.message_id ? `m-${message.message_id}` : nextKey('m'), status: 'sent' };
 }
 
-/**
- * Chat AI untuk satu saham.
- * - session_id disimpan dari balasan pertama dan dikirim pada pesan berikutnya.
- * - Bila `initialSessionId` ada, riwayat dimuat dari /ai-chat/{sessionId}/messages.
- * - Pesan user tampil optimistik; kegagalan (mis. 502) ditampilkan inline dengan "Kirim ulang".
- */
 export default function ChatPanel({ stock, userId, initialSessionId, onSessionChange }) {
   const [sessionId, setSessionId] = useState(initialSessionId || null);
   const [messages, setMessages] = useState([]);
@@ -51,10 +45,22 @@ export default function ChatPanel({ stock, userId, initialSessionId, onSessionCh
   };
 
   useEffect(() => {
-    if (initialSessionId) loadHistory(initialSessionId);
-    // Hanya saat mount; komponen di-remount (key) bila saham/sesi berganti.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    if (!initialSessionId) return undefined;
+    let active = true;
+    chatMessages(initialSessionId).then(
+      (list) => {
+        if (!active) return;
+        setMessages(list.map(toBubble));
+        setHistory({ loading: false, error: null });
+      },
+      (error) => {
+        if (active) setHistory({ loading: false, error });
+      },
+    );
+    return () => {
+      active = false;
+    };
+  }, [initialSessionId]);
 
   useEffect(() => {
     const el = listRef.current;
@@ -75,9 +81,7 @@ export default function ChatPanel({ stock, userId, initialSessionId, onSessionCh
         toBubble(res.assistant_message),
       ]);
     } catch (error) {
-      // 502 tetap mengirim session_id: simpan agar percakapan berlanjut di sesi yang sama.
       if (error.data?.session_id) updateSession(Number(error.data.session_id));
-      // 403: sesi tidak cocok dengan user/saham → mulai sesi baru saat kirim ulang.
       if (error.status === 403) updateSession(null);
       const message = fieldError(error, 'message') || error.message;
       setMessages((prev) => prev.map((m) => (m.key === key ? { ...m, status: 'error', error: message } : m)));

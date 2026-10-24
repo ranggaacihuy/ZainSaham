@@ -2,7 +2,6 @@ import { useEffect, useId, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 
-/** Modal datar dengan overlay bg-black/60. Tutup dengan Escape atau klik overlay. */
 export function Modal({ open, onClose, title, children, footer, size = 'md', initialFocusRef }) {
   const titleId = useId();
   const panelRef = useRef(null);
@@ -28,9 +27,7 @@ export function Modal({ open, onClose, title, children, footer, size = 'md', ini
       document.body.style.overflow = overflow;
       if (previous instanceof HTMLElement) previous.focus();
     };
-    // Hanya dijalankan saat modal dibuka/ditutup agar fokus tidak berpindah setiap render.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
+  }, [open, initialFocusRef]);
 
   if (!open) return null;
 
@@ -69,5 +66,3 @@ export function Modal({ open, onClose, title, children, footer, size = 'md', ini
     document.body,
   );
 }
-
-export default Modal;

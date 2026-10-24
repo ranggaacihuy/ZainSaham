@@ -7,7 +7,7 @@ import ChatPanel from '../components/ChatPanel';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import useAsync from '../hooks/useAsync';
-import { loadStocks } from '../lib/stocksStore';
+import { loadEquities } from '../lib/stocksStore';
 import { ANALYSIS_TYPES, analyze } from '../api/ai';
 
 const MODES = [
@@ -15,7 +15,6 @@ const MODES = [
   { value: 'chat', label: 'Tanya AI' },
 ];
 
-// Sesi chat per saham disimpan di memori selama aplikasi terbuka (tidak di localStorage).
 const chatSessionsByStock = new Map();
 
 function StockSelect({ stocks, value, onChange }) {
@@ -41,7 +40,7 @@ export default function AiAnalysisPage() {
   const ticker = (searchParams.get('ticker') || '').toUpperCase();
   const sessionParam = Number(searchParams.get('session')) || null;
 
-  const stocks = useAsync((opts) => loadStocks(opts), []);
+  const stocks = useAsync((opts) => loadEquities(opts), []);
   const stock = stocks.data?.find((s) => s.ticker === ticker) || null;
 
   const [analysisType, setAnalysisType] = useState('combined');

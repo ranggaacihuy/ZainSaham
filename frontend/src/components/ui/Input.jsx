@@ -1,7 +1,7 @@
 import { forwardRef, useState } from 'react';
 import { ChevronDown, Eye, EyeOff } from 'lucide-react';
 
-export const controlClass =
+const controlClass =
   'w-full rounded-lg border border-border bg-bg text-sm text-text placeholder:text-text-muted ' +
   'transition-colors duration-150 hover:border-text-muted/40 ' +
   'focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent ' +
@@ -76,6 +76,4 @@ export function Field({ label, htmlFor, hint, error, children }) {
     </div>
   );
 }
-
-export default Input;
 

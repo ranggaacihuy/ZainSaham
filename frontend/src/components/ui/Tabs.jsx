@@ -1,10 +1,5 @@
 import { useRef } from 'react';
 
-/**
- * Tabs bergaris bawah (navigasi konten) atau segmented control (pilihan nilai).
- * - variant="underline": role tablist
- * - variant="segmented": role radiogroup
- */
 export function Tabs({ items, value, onChange, variant = 'underline', label, className = '', size = 'md', columns }) {
   const refs = useRef([]);
   const isSegmented = variant === 'segmented';
@@ -38,6 +33,8 @@ export function Tabs({ items, value, onChange, variant = 'underline', label, cla
               type="button"
               role="radio"
               aria-checked={active}
+              aria-label={item.title}
+              title={item.title}
               tabIndex={active ? 0 : -1}
               onKeyDown={(e) => handleKeyDown(e, index)}
               onClick={() => onChange(item.value)}
@@ -82,6 +79,3 @@ export function Tabs({ items, value, onChange, variant = 'underline', label, cla
     </div>
   );
 }
-
-export default Tabs;
-

@@ -1,7 +1,6 @@
 import { Link } from 'react-router-dom';
 import { Button } from './ui';
 
-/** Halaman 404 yang rapi, dipakai untuk rute tak dikenal dan ticker yang tidak ada. */
 export default function NotFound({ title = 'Halaman tidak ditemukan', message, actionLabel = 'Ke dashboard', actionTo = '/dashboard' }) {
   return (
     <div className="flex min-h-[50vh] flex-col items-center justify-center px-4 text-center">
@@ -14,4 +13,3 @@ export default function NotFound({ title = 'Halaman tidak ditemukan', message, a
     </div>
   );
 }
-

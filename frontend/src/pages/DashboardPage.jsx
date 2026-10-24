@@ -6,9 +6,42 @@ import NewsModal from '../components/NewsModal';
 import useAsync from '../hooks/useAsync';
 import { getDashboard } from '../api/dashboard';
 import { analysisTypeLabel } from '../api/ai';
-import { date, dateTime, idr, pct, toneOf } from '../lib/format';
+import { date, dateTime, idr, number, pct, signed, toneOf } from '../lib/format';
 
 const toneText = { up: 'text-up', down: 'text-down', neutral: 'text-text' };
+
+function IndexCard({ dashboard }) {
+  if (dashboard.loading) return <Skeleton className="mb-4 h-18 rounded-xl" />;
+
+  const index = dashboard.data?.index;
+  if (!index?.stock) return null;
+
+  const { stock, summary } = index;
+  const tone = toneText[toneOf(summary?.change_pct)];
+
+  return (
+    <Link
+      to={`/stocks/${stock.ticker}`}
+      className="mb-4 flex items-center gap-4 rounded-xl border border-border bg-surface px-4 py-3 transition-colors duration-150 hover:bg-surface-2 sm:px-5"
+    >
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-semibold text-text">{stock.ticker}</p>
+        <p className="truncate text-xs text-text-muted">
+          {[stock.company_name, summary?.date && date(summary.date)].filter(Boolean).join(' · ')}
+        </p>
+      </div>
+      <div className="hidden shrink-0 sm:block">
+        <Sparkline values={summary?.sparkline || []} width={160} height={36} />
+      </div>
+      <div className="shrink-0 text-right">
+        <p className="num text-xl font-semibold text-text">{number(summary?.close, 2)}</p>
+        <p className={`num text-xs ${tone}`}>
+          {signed(summary?.change_value, 2)} ({pct(summary?.change_pct)})
+        </p>
+      </div>
+    </Link>
+  );
+}
 
 function StatCard({ label, children, loading }) {
   return (
@@ -239,6 +272,8 @@ export default function DashboardPage() {
         title="Dashboard"
         description={data?.lastPriceDate ? `Data harga terakhir ${date(data.lastPriceDate)}` : 'Ringkasan watchlist Anda'}
       />
+
+      <IndexCard dashboard={dashboard} />
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatCard label="Saham di watchlist" loading={dashboard.loading}>

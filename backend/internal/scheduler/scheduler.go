@@ -2,6 +2,7 @@ package scheduler
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"sync/atomic"
 	"time"
@@ -12,15 +13,17 @@ import (
 
 const timezone = "Asia/Jakarta"
 
+type Task func(ctx context.Context) (string, error)
+
 type job struct {
 	name    string
 	spec    string
-	options market.SyncOptions
+	task    Task
 	skip    func(time.Time) bool
 	running atomic.Bool
 }
 
-func Start(service *market.Service) (*cron.Cron, error) {
+func Start(service *market.Service, refreshListings Task) (*cron.Cron, error) {
 	location, err := time.LoadLocation(timezone)
 	if err != nil {
 		return nil, err
@@ -28,32 +31,36 @@ func Start(service *market.Service) (*cron.Cron, error) {
 
 	jobs := []*job{
 		{
-			name:    "harga intraday",
-			spec:    "*/15 9-16 * * 1-5",
-			options: market.SyncOptions{Range: "5d", Prices: true},
-			skip:    func(now time.Time) bool { return now.Hour() == 16 && now.Minute() > 30 },
+			name: "harga intraday",
+			spec: "*/15 9-16 * * 1-5",
+			task: syncTask(service, market.SyncOptions{Range: "5d", Prices: true}),
+			skip: func(now time.Time) bool { return now.Hour() == 16 && now.Minute() > 30 },
 		},
 		{
-			name:    "harga penutupan",
-			spec:    "0 17 * * 1-5",
-			options: market.SyncOptions{Range: "1mo", Prices: true},
+			name: "harga penutupan",
+			spec: "0 17 * * 1-5",
+			task: syncTask(service, market.SyncOptions{Range: "1mo", Prices: true}),
 		},
 		{
-			name:    "berita",
-			spec:    "7 * * * *",
-			options: market.SyncOptions{News: true},
+			name: "berita",
+			spec: "7 * * * *",
+			task: syncTask(service, market.SyncOptions{News: true}),
 		},
 		{
-			name:    "fundamental",
-			spec:    "0 6 * * 1",
-			options: market.SyncOptions{Fundamentals: true},
+			name: "fundamental",
+			spec: "0 6 * * 1",
+			task: syncTask(service, market.SyncOptions{Fundamentals: true}),
 		},
+	}
+
+	if refreshListings != nil {
+		jobs = append(jobs, &job{name: "daftar emiten", spec: "30 5 * * 1", task: refreshListings})
 	}
 
 	scheduler := cron.New(cron.WithLocation(location))
 
 	for _, j := range jobs {
-		if _, err := scheduler.AddFunc(j.spec, func() { j.run(service, location) }); err != nil {
+		if _, err := scheduler.AddFunc(j.spec, func() { j.run(location) }); err != nil {
 			return nil, err
 		}
 	}
@@ -63,7 +70,15 @@ func Start(service *market.Service) (*cron.Cron, error) {
 	return scheduler, nil
 }
 
-func (j *job) run(service *market.Service, location *time.Location) {
+func syncTask(service *market.Service, opts market.SyncOptions) Task {
+	return func(ctx context.Context) (string, error) {
+		succeeded, failed, err := service.SyncAll(ctx, opts, log.Writer())
+
+		return fmt.Sprintf("%d berhasil, %d gagal", succeeded, failed), err
+	}
+}
+
+func (j *job) run(location *time.Location) {
 	if j.skip != nil && j.skip(time.Now().In(location)) {
 		return
 	}
@@ -74,14 +89,14 @@ func (j *job) run(service *market.Service, location *time.Location) {
 	}
 	defer j.running.Store(false)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
 	defer cancel()
 
-	succeeded, failed, err := service.SyncAll(ctx, j.options, log.Writer())
+	summary, err := j.task(ctx)
 	if err != nil {
 		log.Printf("sinkronisasi %s gagal: %v", j.name, err)
 		return
 	}
 
-	log.Printf("sinkronisasi %s selesai: %d berhasil, %d gagal", j.name, succeeded, failed)
+	log.Printf("sinkronisasi %s selesai: %s", j.name, summary)
 }

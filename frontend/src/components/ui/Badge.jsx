@@ -5,7 +5,6 @@ const tones = {
   warn: 'bg-warn/10 text-warn',
 };
 
-/** Satu-satunya gaya badge. */
 export function Badge({ tone = 'neutral', className = '', children, ...props }) {
   return (
     <span
@@ -16,6 +15,3 @@ export function Badge({ tone = 'neutral', className = '', children, ...props }) 
     </span>
   );
 }
-
-export default Badge;
-

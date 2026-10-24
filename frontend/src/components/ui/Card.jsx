@@ -1,4 +1,3 @@
-/** Satu-satunya gaya kartu: datar, border 1px, radius 12px. */
 export function Card({ title, description, action, children, className = '', bodyClassName = '', padded = true, as: Component = 'section' }) {
   const hasHeader = title || action;
   return (
@@ -16,6 +15,3 @@ export function Card({ title, description, action, children, className = '', bod
     </Component>
   );
 }
-
-export default Card;
-

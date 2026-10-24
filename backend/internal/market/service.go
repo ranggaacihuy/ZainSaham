@@ -83,7 +83,7 @@ func (s *Service) Fetch(ctx context.Context, ticker, dataRange string) (*Chart, 
 }
 
 func (s *Service) Sync(ctx context.Context, stock *models.Stock, dataRange string) (SyncResult, error) {
-	chart, err := s.yahoo.FetchDaily(ctx, stock.Ticker, dataRange)
+	chart, err := s.yahoo.FetchDaily(ctx, stock.MarketCode(), dataRange)
 	if err != nil {
 		return SyncResult{}, err
 	}
@@ -92,7 +92,7 @@ func (s *Service) Sync(ctx context.Context, stock *models.Stock, dataRange strin
 }
 
 func (s *Service) Store(stock *models.Stock, chart *Chart) (SyncResult, error) {
-	if name := chart.Meta.CompanyName(); name != "" && name != stock.CompanyName {
+	if name := chart.Meta.CompanyName(); name != "" && name != stock.CompanyName && !stock.IsIndex() {
 		if err := s.db.Model(stock).Update("company_name", name).Error; err != nil {
 			return SyncResult{}, err
 		}
@@ -195,7 +195,7 @@ func (s *Service) Quote(ctx context.Context, stock *models.Stock) (*Quote, error
 	}
 
 	value, err, _ := s.group.Do(fmt.Sprint(stock.StockID), func() (any, error) {
-		chart, err := s.yahoo.FetchDaily(ctx, stock.Ticker, "5d")
+		chart, err := s.yahoo.FetchDaily(ctx, stock.MarketCode(), "5d")
 		if err != nil {
 			return nil, err
 		}
@@ -371,7 +371,7 @@ func (s *Service) syncStock(ctx context.Context, stock *models.Stock, opts SyncO
 		}
 	}
 
-	if opts.Fundamentals {
+	if opts.Fundamentals && !stock.IsIndex() {
 		if count, err := s.SyncFundamentals(ctx, stock); err != nil {
 			errs = append(errs, "fundamental: "+err.Error())
 		} else {
@@ -379,7 +379,7 @@ func (s *Service) syncStock(ctx context.Context, stock *models.Stock, opts SyncO
 		}
 	}
 
-	if opts.News {
+	if opts.News && !stock.IsIndex() {
 		if count, err := s.SyncNews(ctx, stock); err != nil {
 			errs = append(errs, "berita: "+err.Error())
 		} else {
@@ -388,6 +388,9 @@ func (s *Service) syncStock(ctx context.Context, stock *models.Stock, opts SyncO
 	}
 
 	text := strings.Join(done, ", ")
+	if text == "" && len(errs) == 0 {
+		text = "tidak ada data yang perlu diperbarui"
+	}
 	if len(errs) > 0 {
 		if text != "" {
 			text += " | "

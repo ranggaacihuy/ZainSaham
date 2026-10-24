@@ -14,6 +14,7 @@ type App struct {
 	Config   config.Config
 	DB       *gorm.DB
 	Market   *market.Service
+	Listings *market.ListingSource
 	Analysis *analysis.Service
 }
 
@@ -27,6 +28,7 @@ func New(cfg config.Config) (*App, error) {
 		Config:   cfg,
 		DB:       db,
 		Market:   market.NewService(db, cfg.Yahoo, cfg.News),
+		Listings: market.NewListingSource(cfg.Listings),
 		Analysis: analysis.NewService(db, gemini.New(cfg.Gemini)),
 	}, nil
 }

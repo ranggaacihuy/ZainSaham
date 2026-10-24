@@ -12,8 +12,8 @@ import useAsync from '../hooks/useAsync';
 import useLiveQuote from '../hooks/useLiveQuote';
 import { getByTicker, loadStocks } from '../lib/stocksStore';
 import { getFundamentals, getIndicators, getNews, getPrices } from '../api/stocks';
-import { RANGES, classifyPeriods, describeIndicators, filterByRange, summarizePrices } from '../lib/market';
-import { compact, date, dateTime, idr, pct, signed, toneOf } from '../lib/format';
+import { classifyPeriods, describeIndicators, summarizePrices } from '../lib/market';
+import { compact, date, dateTime, idr, number, pct, signed, toneOf } from '../lib/format';
 
 const TABS = [
   { value: 'grafik', label: 'Grafik' },
@@ -21,6 +21,10 @@ const TABS = [
   { value: 'fundamental', label: 'Fundamental' },
   { value: 'berita', label: 'Berita' },
 ];
+
+const INDEX_TABS = TABS.slice(0, 2);
+
+const isIndex = (stock) => stock?.kind === 'index';
 
 const toneText = { up: 'text-up', down: 'text-down', neutral: 'text-text-muted' };
 
@@ -33,11 +37,6 @@ function mergePrice(list, price) {
     return same ? list : [...list.slice(0, -1), price];
   }
   return [...list, price];
-}
-
-function rangeNote(result) {
-  if (!result?.isPartial || !result.since) return null;
-  return `Data tersedia sejak ${date(result.since)}.`;
 }
 
 function HeaderSkeleton() {
@@ -53,6 +52,8 @@ function HeaderSkeleton() {
 function PriceHeader({ stock, prices, live }) {
   const summary = prices.data ? summarizePrices(prices.data) : null;
   const tone = toneOf(summary?.change_pct);
+  const index = isIndex(stock);
+  const formatPrice = index ? (value) => number(value, 2) : idr;
 
   return (
     <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
@@ -70,16 +71,16 @@ function PriceHeader({ stock, prices, live }) {
           {summary && (
             <>
               <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                <span className="num text-display font-semibold text-text">{idr(summary.close)}</span>
+                <span className="num text-display font-semibold text-text">{formatPrice(summary.close)}</span>
                 <span className={`num text-sm font-medium ${toneText[tone]}`}>
-                  {signed(summary.change_value)} ({pct(summary.change_pct)})
+                  {signed(summary.change_value, index ? 2 : 0)} ({pct(summary.change_pct)})
                 </span>
               </div>
               <dl className="num mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-text-muted">
                 {[
-                  ['O', idr(summary.open)],
-                  ['H', idr(summary.high)],
-                  ['L', idr(summary.low)],
+                  ['O', formatPrice(summary.open)],
+                  ['H', formatPrice(summary.high)],
+                  ['L', formatPrice(summary.low)],
                   ['Vol', compact(summary.volume)],
                 ].map(([label, value]) => (
                   <div key={label} className="flex gap-1">
@@ -114,37 +115,42 @@ function PriceHeader({ stock, prices, live }) {
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-2">
-        <WatchlistButton stock={stock} />
-        <Button as={Link} to={`/ai-analysis?ticker=${stock.ticker}`} variant="primary" icon={MessageSquareText}>
-          Analisis AI
-        </Button>
-      </div>
+      {!index && (
+        <div className="flex flex-wrap gap-2">
+          <WatchlistButton stock={stock} />
+          <Button as={Link} to={`/ai-analysis?ticker=${stock.ticker}`} variant="primary" icon={MessageSquareText}>
+            Analisis AI
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
 
-function ChartTab({ prices, range, onRangeChange }) {
-  const filtered = useMemo(() => filterByRange(prices.data || [], range, 'price_date'), [prices.data, range]);
+function ChartTab({ stock, prices, timeframe, onTimeframeChange }) {
   if (prices.loading) return <Skeleton className="h-100 rounded-xl" />;
   if (prices.error) return <Card><ErrorState error={prices.error} onRetry={prices.reload} /></Card>;
   if (!prices.data?.length) return <Card><EmptyState message="Data harga belum tersedia untuk saham ini." /></Card>;
-  return <StockChart prices={filtered.items} currentRange={range} onRangeChange={onRangeChange} note={rangeNote(filtered)} />;
+  return (
+    <StockChart
+      key={stock.stock_id}
+      prices={prices.data}
+      timeframe={timeframe}
+      onTimeframeChange={onTimeframeChange}
+      index={isIndex(stock)}
+    />
+  );
 }
 
-function TechnicalTab({ stockId, prices, range, onRangeChange }) {
-  const indicators = useAsync((opts) => getIndicators(stockId, opts), [stockId]);
-  const filtered = useMemo(
-    () => filterByRange(indicators.data || [], range, 'indicator_date'),
-    [indicators.data, range],
-  );
+function TechnicalTab({ stock, prices, timeframe, onTimeframeChange }) {
+  const indicators = useAsync((opts) => getIndicators(stock.stock_id, opts), [stock.stock_id]);
   const description = useMemo(() => {
     const list = indicators.data || [];
     const lastClose = prices.data?.length ? prices.data[prices.data.length - 1].close_price : null;
     return describeIndicators(list[list.length - 1], lastClose);
   }, [indicators.data, prices.data]);
 
-  if (indicators.loading) {
+  if (indicators.loading || prices.loading) {
     return (
       <div className="space-y-4">
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
@@ -157,20 +163,18 @@ function TechnicalTab({ stockId, prices, range, onRangeChange }) {
     );
   }
   if (indicators.error) return <Card><ErrorState error={indicators.error} onRetry={indicators.reload} /></Card>;
-  if (!indicators.data?.length) return <Card><EmptyState message="Data indikator teknikal belum tersedia untuk saham ini." /></Card>;
+  if (prices.error) return <Card><ErrorState error={prices.error} onRetry={prices.reload} /></Card>;
+  if (!indicators.data?.length || !prices.data?.length) return <Card><EmptyState message="Data indikator teknikal belum tersedia untuk saham ini." /></Card>;
 
   return (
-    <div className="space-y-4">
-      <Tabs
-        variant="segmented"
-        size="sm"
-        label="Rentang waktu"
-        items={RANGES.map((r) => ({ value: r.value, label: r.label }))}
-        value={range}
-        onChange={onRangeChange}
-      />
-      <TechnicalChart history={filtered.items} description={description} note={rangeNote(filtered)} />
-    </div>
+    <TechnicalChart
+      key={stock.stock_id}
+      prices={prices.data}
+      description={description}
+      timeframe={timeframe}
+      onTimeframeChange={onTimeframeChange}
+      index={isIndex(stock)}
+    />
   );
 }
 
@@ -183,7 +187,6 @@ function FundamentalTab({ stockId }) {
   if (fundamentals.error) return <Card><ErrorState error={fundamentals.error} onRetry={fundamentals.reload} /></Card>;
   if (!fundamentals.data?.length) return <Card><EmptyState message="Data fundamental belum tersedia untuk saham ini." /></Card>;
 
-  // Toggle hanya muncul bila pola periode benar-benar bisa dibedakan.
   if (periods.canToggle) {
     return (
       <FundamentalChart
@@ -242,8 +245,7 @@ function NewsTab({ stock }) {
 export default function StockDetailPage() {
   const { ticker } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [range, setRange] = useState('3B');
-  const tab = TABS.some((t) => t.value === searchParams.get('tab')) ? searchParams.get('tab') : 'grafik';
+  const [timeframe, setTimeframe] = useState('1H');
 
   const stockState = useAsync(
     async (opts) => {
@@ -253,7 +255,9 @@ export default function StockDetailPage() {
     [ticker],
   );
   const stock = stockState.data;
-  const prices = useAsync((opts) => getPrices(stock.stock_id, opts), [stock?.stock_id], { enabled: Boolean(stock) });
+  const tabs = isIndex(stock) ? INDEX_TABS : TABS;
+  const tab = tabs.some((t) => t.value === searchParams.get('tab')) ? searchParams.get('tab') : 'grafik';
+  const prices =useAsync((opts) => getPrices(stock.stock_id, opts), [stock?.stock_id], { enabled: Boolean(stock) });
   const { setData: setPrices } = prices;
   const live = useLiveQuote(prices.data ? stock?.stock_id : null, (price) => {
     const last = prices.data?.[prices.data.length - 1];
@@ -318,11 +322,11 @@ export default function StockDetailPage() {
       {backLink}
       <PriceHeader stock={stock} prices={prices} live={live} />
 
-      <Tabs items={TABS} value={tab} onChange={setTab} label="Bagian detail saham" className="mb-4" />
+      <Tabs items={tabs} value={tab} onChange={setTab} label="Bagian detail saham" className="mb-4" />
 
       <div role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`}>
-        {tab === 'grafik' && <ChartTab prices={prices} range={range} onRangeChange={setRange} />}
-        {tab === 'teknikal' && <TechnicalTab stockId={stock.stock_id} prices={prices} range={range} onRangeChange={setRange} />}
+        {tab === 'grafik' && <ChartTab stock={stock} prices={prices} timeframe={timeframe} onTimeframeChange={setTimeframe} />}
+        {tab === 'teknikal' && <TechnicalTab stock={stock} prices={prices} timeframe={timeframe} onTimeframeChange={setTimeframe} />}
         {tab === 'fundamental' && <FundamentalTab stockId={stock.stock_id} />}
         {tab === 'berita' && <NewsTab stock={stock} />}
       </div>

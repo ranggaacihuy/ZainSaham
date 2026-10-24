@@ -2,7 +2,6 @@ import { ExternalLink } from 'lucide-react';
 import { Modal } from './ui';
 import { dateTime } from '../lib/format';
 
-/** Modal baca berita. Data berasal dari list (tidak ada endpoint detail berita). */
 export default function NewsModal({ news, onClose }) {
   const paragraphs = (news?.content || '')
     .split(/\n{2,}|\r\n\r\n/)

@@ -50,7 +50,6 @@ export default function AppLayout() {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  // Kembali ke atas setiap pindah halaman.
   useEffect(() => {
     window.scrollTo(0, 0);
   }, [location.pathname]);
@@ -62,7 +61,6 @@ export default function AppLayout() {
     <div className="min-h-screen bg-bg text-text md:flex">
       <SearchModal open={searchOpen} onClose={() => setSearchOpen(false)} />
 
-      {/* Sidebar desktop */}
       <aside className="sticky top-0 hidden h-screen w-58 shrink-0 flex-col border-r border-border bg-surface md:flex">
         <div className="flex h-14 items-center px-5">
           <Brand />
@@ -105,7 +103,6 @@ export default function AppLayout() {
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        {/* Topbar */}
         <header className="sticky top-0 z-30 flex h-14 items-center justify-between gap-3 border-b border-border bg-bg px-4 sm:px-6">
           <div className="flex min-w-0 items-center gap-3">
             <div className="md:hidden">
@@ -142,7 +139,6 @@ export default function AppLayout() {
         </main>
       </div>
 
-      {/* Bottom bar mobile */}
       <nav
         aria-label="Navigasi utama"
         className="fixed inset-x-0 bottom-0 z-30 grid h-16 grid-cols-5 border-t border-border bg-surface md:hidden"

@@ -7,7 +7,7 @@ import ConfirmModal from '../components/ConfirmModal';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import useAsync from '../hooks/useAsync';
-import { loadStocks } from '../lib/stocksStore';
+import { loadEquities } from '../lib/stocksStore';
 import { analysisTypeLabel, analyze, deleteSession, getSession, listSessions } from '../api/ai';
 import { dateTime, number } from '../lib/format';
 
@@ -145,7 +145,7 @@ export default function AnalysisHistoryPage() {
   const [deleting, setDeleting] = useState(false);
   const [running, setRunning] = useState(false);
 
-  const stocks = useAsync((opts) => loadStocks(opts), []);
+  const stocks = useAsync((opts) => loadEquities(opts), []);
   const stock = stocks.data?.find((s) => s.ticker === ticker) || null;
 
   const sessions = useAsync(

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useEffectEvent, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, Search } from 'lucide-react';
 import {
@@ -56,10 +56,12 @@ export default function StockListPage() {
     setSearchParams(next, { replace: true });
   };
 
-  // Sinkronkan pencarian (debounce 400 ms) ke URL dan kembali ke halaman 1.
+  const syncQuery = useEffectEvent((value) => {
+    if (value !== q) updateParams({ q: value, page: 1 });
+  });
+
   useEffect(() => {
-    if (debouncedQuery.trim() !== q) updateParams({ q: debouncedQuery.trim(), page: 1 });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    syncQuery(debouncedQuery.trim());
   }, [debouncedQuery]);
 
   const resetFilters = () => {

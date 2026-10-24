@@ -5,11 +5,6 @@ import { addToWatchlist, getWatchlist, removeFromWatchlist } from '../api/watchl
 
 const WatchlistContext = createContext(null);
 
-/**
- * State watchlist bersama untuk seluruh halaman.
- * - Tambah/hapus memakai watchlist_id dari backend.
- * - Setelah tambah/hapus, daftar dimuat ulang tanpa reload halaman.
- */
 export function WatchlistProvider({ children }) {
   const { user } = useAuth();
   const { addToast } = useToast();
@@ -114,7 +109,6 @@ export function WatchlistProvider({ children }) {
   return <WatchlistContext.Provider value={value}>{children}</WatchlistContext.Provider>;
 }
 
-// oxlint-disable-next-line react/only-export-components
 export function useWatchlist() {
   const context = useContext(WatchlistContext);
   if (!context) throw new Error('useWatchlist harus dipakai di dalam WatchlistProvider');

@@ -60,6 +60,14 @@ func (s *Server) listStocks(c *gin.Context) {
 	}
 
 	paginate := c.Query("page") != ""
+
+	kind := c.Query("kind")
+	if kind == "" && paginate {
+		kind = models.KindStock
+	}
+	if kind != "" && kind != "all" {
+		query = query.Where("kind = ?", kind)
+	}
 	page := max(1, queryInt(c, "page", 1))
 	perPage := min(maxPerPage, max(1, queryInt(c, "per_page", defaultPerPage)))
 
@@ -90,7 +98,7 @@ func (s *Server) listStocks(c *gin.Context) {
 	}
 
 	sectors := []string{}
-	if err := s.db.Model(&models.Stock{}).Where("sector <> ''").Distinct().Order("sector").Pluck("sector", &sectors).Error; err != nil {
+	if err := s.db.Model(&models.Stock{}).Where("sector <> '' AND kind = ?", models.KindStock).Distinct().Order("sector").Pluck("sector", &sectors).Error; err != nil {
 		serverError(c, err)
 		return
 	}

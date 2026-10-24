@@ -1,0 +1,25 @@
+services:
+  backend:
+    build: ./backend
+    env_file:
+      - path: ./backend/.env
+        required: false
+    environment:
+      APP_HOST: 0.0.0.0
+      APP_PORT: 8000
+      DB_CONNECTION: sqlite
+      DB_DATABASE: data/zainsaham.db
+    volumes:
+      - data:/app/data
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  data:

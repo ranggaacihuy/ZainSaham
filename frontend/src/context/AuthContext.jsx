@@ -22,9 +22,7 @@ function writeStoredUser(user) {
   try {
     if (user) localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(user));
     else localStorage.removeItem(USER_STORAGE_KEY);
-  } catch {
-    // Abaikan bila localStorage tidak tersedia.
-  }
+  } catch {}
 }
 
 export function AuthProvider({ children }) {
@@ -88,13 +86,8 @@ export function AuthProvider({ children }) {
   );
 
   const logout = useCallback(async () => {
-    try {
-      await logoutApi();
-    } catch {
-      // Tetap bersihkan sesi lokal meskipun request logout gagal.
-    } finally {
-      clearSession();
-    }
+    await logoutApi().catch(() => {});
+    clearSession();
   }, [clearSession]);
 
   const updateProfile = useCallback(async (changes) => {
@@ -129,15 +122,12 @@ export function AuthProvider({ children }) {
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
-// oxlint-disable-next-line react/only-export-components
 export function useAuth() {
   const context = useContext(AuthContext);
   if (!context) throw new Error('useAuth harus dipakai di dalam AuthProvider');
   return context;
 }
 
-/** Nama tampilan user: nama akun atau "Pengguna #ID". */
-// oxlint-disable-next-line react/only-export-components
 export function displayName(user) {
   return user?.name || `Pengguna #${user?.user_id ?? '-'}`;
 }

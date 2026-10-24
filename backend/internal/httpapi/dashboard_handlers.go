@@ -1,12 +1,14 @@
 package httpapi
 
 import (
+	"errors"
 	"math"
 	"sort"
 
 	"github.com/gin-gonic/gin"
 	"github.com/ranggaacihuy/zainsaham/backend/internal/market"
 	"github.com/ranggaacihuy/zainsaham/backend/internal/models"
+	"gorm.io/gorm"
 )
 
 const (
@@ -64,8 +66,15 @@ func (s *Server) dashboard(c *gin.Context) {
 		return
 	}
 
+	index, err := s.marketIndex()
+	if err != nil {
+		serverError(c, err)
+		return
+	}
+
 	ok(c, gin.H{
 		"last_price_date": lastDate,
+		"index":           index,
 		"stats":           watchlistStats(watchlist),
 		"watchlist":       watchlist,
 		"news":            news,
@@ -127,9 +136,27 @@ func (s *Server) latestAnalyses(userID uint, stockIDs []uint) ([]analysisItem, e
 	return items, nil
 }
 
+func (s *Server) marketIndex() (*mover, error) {
+	var index models.Stock
+	err := s.db.Where("kind = ?", models.KindIndex).Order("stock_id").First(&index).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	summaries, err := s.market.Summaries([]uint{index.StockID}, market.SummaryOptions{Sparkline: sparklinePoints})
+	if err != nil {
+		return nil, err
+	}
+
+	return &mover{Stock: index, Summary: summaries[index.StockID]}, nil
+}
+
 func (s *Server) movers() ([]mover, []mover, *models.Date, error) {
 	var stocks []models.Stock
-	if err := s.db.Order("ticker").Find(&stocks).Error; err != nil {
+	if err := s.db.Where("kind = ?", models.KindStock).Order("ticker").Find(&stocks).Error; err != nil {
 		return nil, nil, nil, err
 	}
 

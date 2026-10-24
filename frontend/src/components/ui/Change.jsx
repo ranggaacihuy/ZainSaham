@@ -2,7 +2,6 @@ import { pct, signed, toneOf } from '../../lib/format';
 
 const toneText = { up: 'text-up', down: 'text-down', neutral: 'text-text-muted' };
 
-/** Perubahan harga: selalu hijau/merah, tidak pernah memakai warna aksen. */
 export function Change({ pctValue, value, className = '', showValue = false }) {
   const tone = toneOf(pctValue ?? value);
   return (
@@ -12,6 +11,3 @@ export function Change({ pctValue, value, className = '', showValue = false }) {
     </span>
   );
 }
-
-export default Change;
-

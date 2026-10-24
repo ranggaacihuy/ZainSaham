@@ -1,86 +1,99 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { CandlestickSeries, HistogramSeries, LineSeries } from 'lightweight-charts';
 import { Tabs } from './ui';
-import useElementWidth from '../hooks/useElementWidth';
-import { RANGES } from '../lib/market';
-import { axisDate, compact, date, idr, number } from '../lib/format';
-
-const PRICE_H = 240;
-const GAP = 24;
-const VOL_H = 64;
-const AXIS_H = 20;
-const TOTAL_H = PRICE_H + GAP + VOL_H + AXIS_H;
-const RIGHT_AXIS = 64;
-const LEFT_PAD = 8;
+import useChart from '../hooks/useChart';
+import { TIMEFRAMES, aggregatePrices } from '../lib/market';
+import { continuesSeries, priceFormat, showLatest, volumeFormat, withAlpha } from '../lib/chart';
+import { compact, date, idr, number } from '../lib/format';
 
 const MODES = [
   { value: 'candle', label: 'Candle' },
   { value: 'line', label: 'Garis' },
 ];
 
-function candleWidth(slot) {
-  if (slot < 2) return Math.max(0.5, slot);
-  const width = Math.max(1, Math.round(slot - Math.max(1, slot * 0.2)));
-  if (width < 6 || width % 2 === 1) return width;
-  return width + 1 <= slot - 1 ? width + 1 : width - 1;
+function setupPriceChart(chart, colors) {
+  const candle = chart.addSeries(CandlestickSeries, {
+    upColor: colors.up,
+    downColor: colors.down,
+    wickUpColor: colors.up,
+    wickDownColor: colors.down,
+    borderVisible: false,
+  });
+  const line = chart.addSeries(LineSeries, { color: colors.accent, lineWidth: 2, visible: false });
+  const volume = chart.addSeries(
+    HistogramSeries,
+    { priceFormat: volumeFormat, priceLineVisible: false, lastValueVisible: false },
+    1,
+  );
+
+  const [pricePane, volumePane] = chart.panes();
+  pricePane.setStretchFactor(4);
+  volumePane.setStretchFactor(1);
+
+  return {
+    candle,
+    line,
+    volume,
+    volumeColors: { up: withAlpha(colors.up, 0.4), down: withAlpha(colors.down, 0.4) },
+  };
 }
 
-function niceTicks(min, max, count = 4) {
-  if (max === min) return [min];
-  const step = (max - min) / count;
-  return Array.from({ length: count + 1 }, (_, i) => min + step * i);
+function candleOf(p) {
+  const open = p.open_price ?? p.close_price;
+  return {
+    time: p.price_date,
+    open,
+    high: p.high_price ?? Math.max(open, p.close_price),
+    low: p.low_price ?? Math.min(open, p.close_price),
+    close: p.close_price,
+  };
 }
 
-/**
- * Grafik harga OHLC + volume.
- * `prices` sudah difilter sesuai rentang (lihat filterByRange). `note` menampilkan keterangan data.
- */
-export default function StockChart({ prices = [], currentRange = '3B', onRangeChange, note }) {
+function lineOf(p) {
+  return { time: p.price_date, value: p.close_price };
+}
+
+function volumeOf(p, colors) {
+  const up = p.close_price >= (p.open_price ?? p.close_price);
+  return { time: p.price_date, value: p.volume ?? 0, color: up ? colors.up : colors.down };
+}
+
+export default function StockChart({ prices = [], timeframe = '1H', onTimeframeChange, index = false }) {
   const [mode, setMode] = useState('candle');
-  const [hoverIndex, setHoverIndex] = useState(null);
-  const [containerRef, width] = useElementWidth(720);
+  const { containerRef, apiRef, hoverIndex } = useChart(setupPriceChart);
+  const bars = useMemo(() => aggregatePrices(prices, timeframe), [prices, timeframe]);
 
-  const geometry = useMemo(() => {
-    if (prices.length === 0) return null;
-    let min = Infinity;
-    let max = -Infinity;
-    let maxVol = 0;
-    prices.forEach((p) => {
-      const low = p.low_price ?? p.close_price;
-      const high = p.high_price ?? p.close_price;
-      if (low < min) min = low;
-      if (high > max) max = high;
-      if ((p.volume ?? 0) > maxVol) maxVol = p.volume;
-    });
-    const pad = (max - min) * 0.08 || max * 0.02 || 1;
-    return { yMin: Math.max(0, min - pad), yMax: max + pad, maxVol };
-  }, [prices]);
+  useEffect(() => {
+    const api = apiRef.current;
+    api.candle.applyOptions({ visible: mode === 'candle' });
+    api.line.applyOptions({ visible: mode === 'line' });
+  }, [apiRef, mode]);
 
-  const plotW = Math.max(40, width - RIGHT_AXIS - LEFT_PAD);
-  const count = prices.length;
-  const slot = count > 0 ? plotW / count : plotW;
-  const getX = (i) => LEFT_PAD + slot * i + slot / 2;
-  const barWidth = candleWidth(slot);
-  const barLeft = (i) => (slot < 2 ? getX(i) - barWidth / 2 : Math.round(getX(i) - barWidth / 2));
-  const wickX = (i) => (slot < 2 ? getX(i) : barLeft(i) + Math.floor(barWidth / 2) + 0.5);
-  const getY = (v) => {
-    const range = geometry.yMax - geometry.yMin || 1;
-    return 8 + (1 - (v - geometry.yMin) / range) * (PRICE_H - 16);
-  };
-  const volTop = PRICE_H + GAP;
-  const getVolH = (v) => (geometry.maxVol > 0 ? ((v ?? 0) / geometry.maxVol) * VOL_H : 0);
+  useEffect(() => {
+    const api = apiRef.current;
+    const live = api.timeframe === timeframe && continuesSeries(api.bars, bars, 'price_date');
+    api.bars = bars;
+    api.timeframe = timeframe;
 
-  const active = hoverIndex !== null && prices[hoverIndex] ? prices[hoverIndex] : prices[count - 1];
-  // Rentang panjang (± di atas 6 bulan data bursa) memakai label "Okt 26".
-  const longSpan = count > 130;
+    if (live) {
+      const last = bars[bars.length - 1];
+      api.candle.update(candleOf(last));
+      api.line.update(lineOf(last));
+      api.volume.update(volumeOf(last, api.volumeColors));
+      return;
+    }
 
-  const xLabelEvery = Math.max(1, Math.ceil(count / Math.max(2, Math.floor(plotW / 96))));
+    const format = priceFormat(index ? 2 : 0);
+    api.candle.applyOptions({ priceFormat: format });
+    api.line.applyOptions({ priceFormat: format });
+    api.candle.setData(bars.map(candleOf));
+    api.line.setData(bars.map(lineOf));
+    api.volume.setData(bars.map((p) => volumeOf(p, api.volumeColors)));
+    showLatest(api.chart, bars.length);
+  }, [apiRef, bars, timeframe, index]);
 
-  const handlePointer = (event) => {
-    const rect = event.currentTarget.getBoundingClientRect();
-    const x = event.clientX - rect.left - LEFT_PAD;
-    const index = Math.floor(x / slot);
-    setHoverIndex(index >= 0 && index < count ? index : null);
-  };
+  const active = (hoverIndex !== null && bars[hoverIndex]) || bars[bars.length - 1];
+  const formatPrice = index ? (value) => number(value, 2) : idr;
 
   return (
     <div className="rounded-xl border border-border bg-surface">
@@ -88,16 +101,16 @@ export default function StockChart({ prices = [], currentRange = '3B', onRangeCh
         <Tabs
           variant="segmented"
           size="sm"
-          label="Rentang waktu"
-          items={RANGES.map((r) => ({ value: r.value, label: r.label }))}
-          value={currentRange}
-          onChange={(value) => onRangeChange?.(value)}
+          label="Ukuran candle"
+          items={TIMEFRAMES}
+          value={timeframe}
+          onChange={(value) => onTimeframeChange?.(value)}
         />
         <Tabs variant="segmented" size="sm" label="Jenis grafik" items={MODES} value={mode} onChange={setMode} />
       </div>
 
       <div className="px-4 pb-4 pt-3">
-        {active ? (
+        {active && (
           <dl className="num mb-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-text-muted">
             <div>
               <dt className="sr-only">Tanggal</dt>
@@ -111,7 +124,7 @@ export default function StockChart({ prices = [], currentRange = '3B', onRangeCh
             ].map(([label, value]) => (
               <div key={label} className="flex gap-1">
                 <dt>{label}</dt>
-                <dd className="text-text">{idr(value)}</dd>
+                <dd className="text-text">{formatPrice(value)}</dd>
               </div>
             ))}
             <div className="flex gap-1">
@@ -119,122 +132,11 @@ export default function StockChart({ prices = [], currentRange = '3B', onRangeCh
               <dd className="text-text">{compact(active.volume)}</dd>
             </div>
           </dl>
-        ) : null}
+        )}
 
-        <div ref={containerRef} className="w-full min-w-0 overflow-hidden">
-          {!geometry ? (
-            <div className="flex h-60 items-center justify-center text-sm text-text-muted">
-              Data harga belum tersedia.
-            </div>
-          ) : (
-            <svg
-              width={width}
-              height={TOTAL_H}
-              viewBox={`0 0 ${width} ${TOTAL_H}`}
-              className="block touch-none select-none"
-              role="img"
-              aria-label="Grafik harga dan volume"
-              onPointerMove={handlePointer}
-              onPointerLeave={() => setHoverIndex(null)}
-            >
-              {/* Grid & label harga */}
-              {niceTicks(geometry.yMin, geometry.yMax).map((tick) => {
-                const y = getY(tick);
-                return (
-                  <g key={tick}>
-                    <line x1={LEFT_PAD} x2={LEFT_PAD + plotW} y1={y} y2={y} className="stroke-border" strokeWidth="1" />
-                    <text x={LEFT_PAD + plotW + 8} y={y + 4} className="num fill-text-muted" fontSize="12">
-                      {number(tick, 0)}
-                    </text>
-                  </g>
-                );
-              })}
-              <line x1={LEFT_PAD} x2={LEFT_PAD + plotW} y1={volTop + VOL_H} y2={volTop + VOL_H} className="stroke-border" />
-              <text x={LEFT_PAD + plotW + 8} y={volTop + 12} className="fill-text-muted" fontSize="12">
-                Vol
-              </text>
+        <div ref={containerRef} role="figure" aria-label="Grafik harga dan volume" className="h-80 w-full sm:h-96" />
 
-              {/* Seri harga */}
-              {mode === 'line' ? (
-                <polyline
-                  fill="none"
-                  className="stroke-accent"
-                  strokeWidth="1.5"
-                  strokeLinejoin="round"
-                  points={prices.map((p, i) => `${getX(i)},${getY(p.close_price)}`).join(' ')}
-                />
-              ) : (
-                prices.map((p, i) => {
-                  const open = p.open_price ?? p.close_price;
-                  const high = p.high_price ?? Math.max(open, p.close_price);
-                  const low = p.low_price ?? Math.min(open, p.close_price);
-                  const up = p.close_price >= open;
-                  const x = wickX(i);
-                  const top = Math.round(getY(Math.max(open, p.close_price)));
-                  const h = Math.max(1, Math.round(Math.abs(getY(open) - getY(p.close_price))));
-                  return (
-                    <g
-                      key={p.price_date}
-                      className={up ? 'fill-up stroke-up' : 'fill-down stroke-down'}
-                      shapeRendering={slot < 2 ? undefined : 'crispEdges'}
-                    >
-                      <line x1={x} x2={x} y1={Math.round(getY(high))} y2={Math.round(getY(low))} strokeWidth="1" />
-                      <rect x={barLeft(i)} y={top} width={barWidth} height={h} stroke="none" />
-                    </g>
-                  );
-                })
-              )}
-
-              {/* Volume */}
-              {prices.map((p, i) => {
-                const h = getVolH(p.volume);
-                const up = p.close_price >= (p.open_price ?? p.close_price);
-                return (
-                  <rect
-                    key={`v-${p.price_date}`}
-                    x={barLeft(i)}
-                    y={volTop + VOL_H - h}
-                    width={barWidth}
-                    height={h}
-                    className={up ? 'fill-up/40' : 'fill-down/40'}
-                    shapeRendering={slot < 2 ? undefined : 'crispEdges'}
-                  />
-                );
-              })}
-
-              {/* Label tanggal */}
-              {prices.map((p, i) =>
-                i % xLabelEvery === 0 ? (
-                  <text
-                    key={`x-${p.price_date}`}
-                    x={getX(i)}
-                    y={TOTAL_H - 4}
-                    textAnchor={i === 0 ? 'start' : 'middle'}
-                    className="fill-text-muted"
-                    fontSize="12"
-                  >
-                    {axisDate(p.price_date, longSpan)}
-                  </text>
-                ) : null,
-              )}
-
-              {/* Crosshair */}
-              {hoverIndex !== null && prices[hoverIndex] && (
-                <line
-                  x1={getX(hoverIndex)}
-                  x2={getX(hoverIndex)}
-                  y1={0}
-                  y2={volTop + VOL_H}
-                  className="stroke-text-muted"
-                  strokeWidth="1"
-                  strokeDasharray="3 3"
-                />
-              )}
-            </svg>
-          )}
-        </div>
-
-        {note && <p className="mt-3 text-xs text-text-muted">{note}</p>}
+        <p className="mt-3 text-xs text-text-muted">Geser untuk menggulir, scroll atau cubit untuk zoom.</p>
       </div>
     </div>
   );

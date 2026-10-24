@@ -15,11 +15,6 @@ const PERIOD_OPTIONS = [
 
 const ratio = (v, suffix = '') => (v === null || v === undefined ? '–' : `${number(v)}${suffix}`);
 
-/**
- * Fundamental: grafik pendapatan vs laba bersih + tabel rasio.
- * `fundamentals` urut terbaru → lama (seperti dari backend).
- * `periodType`/`onTypeChange` hanya diberikan bila pola periode bisa dibedakan (lihat classifyPeriods).
- */
 export default function FundamentalChart({ fundamentals = [], periodType, onTypeChange }) {
   const [expanded, setExpanded] = useState(null);
   const [chartRef, width] = useElementWidth(720);

@@ -41,11 +41,28 @@ type Stock struct {
 	Sector      string    `gorm:"size:100" json:"sector"`
 	Exchange    string    `gorm:"size:20;not null;default:IDX" json:"exchange"`
 	Currency    string    `gorm:"size:3;not null;default:IDR" json:"currency"`
+	Kind        string    `gorm:"size:10;not null;default:stock;index" json:"kind"`
+	YahooSymbol string    `gorm:"size:20" json:"-"`
 	CreatedAt   time.Time `json:"-"`
 	UpdatedAt   time.Time `json:"-"`
 }
 
 func (Stock) TableName() string { return "stocks" }
+
+const (
+	KindStock = "stock"
+	KindIndex = "index"
+)
+
+func (s Stock) IsIndex() bool { return s.Kind == KindIndex }
+
+func (s Stock) MarketCode() string {
+	if s.YahooSymbol != "" {
+		return s.YahooSymbol
+	}
+
+	return s.Ticker
+}
 
 type StockPrice struct {
 	PriceID    uint      `gorm:"column:price_id;primaryKey" json:"-"`

@@ -61,7 +61,6 @@ export function ToastProvider({ children }) {
   );
 }
 
-// oxlint-disable-next-line react/only-export-components
 export function useToast() {
   const context = useContext(ToastContext);
   if (!context) throw new Error('useToast harus dipakai di dalam ToastProvider');

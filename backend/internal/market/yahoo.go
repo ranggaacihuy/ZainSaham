@@ -90,8 +90,13 @@ func NewYahoo(cfg config.Yahoo) *Yahoo {
 	}
 }
 
-func (y *Yahoo) Symbol(ticker string) string {
-	return strings.ToUpper(strings.TrimSpace(ticker)) + y.suffix
+func (y *Yahoo) Symbol(code string) string {
+	code = strings.ToUpper(strings.TrimSpace(code))
+	if strings.HasPrefix(code, "^") {
+		return code
+	}
+
+	return code + y.suffix
 }
 
 func (y *Yahoo) FetchDaily(ctx context.Context, ticker, dataRange string) (*Chart, error) {

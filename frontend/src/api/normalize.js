@@ -1,16 +1,9 @@
-// Normalisasi respons backend Go (Gin).
-// Kolom angka bisa berupa number atau string, jadi dikonversi di sini — sekali saja.
-
 export function toNumber(value) {
   if (value === null || value === undefined || value === '') return null;
   const n = typeof value === 'number' ? value : Number(value);
   return Number.isFinite(n) ? n : null;
 }
 
-/**
- * Kolom tanggal dikirim sebagai "2026-10-20" atau ISO UTC ("2026-10-20T00:00:00Z").
- * Backend memakai timezone UTC, jadi 10 karakter pertama adalah tanggal yang benar.
- */
 export function toDateKey(value) {
   if (!value) return null;
   const str = String(value);
@@ -52,6 +45,7 @@ export function normalizeStock(raw) {
     sector: raw.sector ?? '',
     exchange: raw.exchange ?? '',
     currency: raw.currency ?? '',
+    kind: raw.kind || 'stock',
     summary: normalizeSummary(raw.summary),
   };
 }
@@ -150,7 +144,6 @@ export function normalizeSession(raw) {
   };
 }
 
-/** `context_data` sengaja dibuang: ukurannya sangat besar dan tidak dipakai di UI. */
 export function normalizeAnalysis(raw) {
   return {
     ai_analysis_id: toId(raw.ai_analysis_id),
@@ -187,4 +180,3 @@ export function normalizeMessage(raw) {
 export function normalizeList(data, normalizer) {
   return Array.isArray(data) ? data.map(normalizer) : [];
 }
-

@@ -2,7 +2,6 @@ import { Bookmark, BookmarkCheck } from 'lucide-react';
 import { Button } from './ui';
 import { useWatchlist } from '../context/WatchlistContext';
 
-/** Tombol tambah/hapus watchlist. `compact` = tombol ikon untuk baris tabel. */
 export default function WatchlistButton({ stock, compact = false, className = '' }) {
   const watchlist = useWatchlist();
   if (!stock) return null;
@@ -41,4 +40,3 @@ export default function WatchlistButton({ stock, compact = false, className = ''
     </Button>
   );
 }
-

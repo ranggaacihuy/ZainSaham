@@ -9,7 +9,6 @@ import {
 } from './normalize';
 import { createCache } from '../lib/cache';
 
-// GET /stocks — semua saham beserta ringkasan harga terakhir.
 export async function getStocks() {
   const res = await api.get('/stocks');
   return normalizeList(unwrap(res), normalizeStock);
@@ -30,13 +29,6 @@ export async function searchStocks({ q = '', sector = '', page = 1, perPage = 20
   };
 }
 
-// GET /stocks/{stockId}
-export async function getStock(stockId) {
-  const res = await api.get(`/stocks/${stockId}`);
-  return normalizeStock(unwrap(res));
-}
-
-// Harga & indikator di-cache per saham: satu kali fetch, rentang waktu difilter di frontend.
 const pricesCache = createCache(async (stockId) => {
   const res = await api.get(`/stocks/${stockId}/prices`);
   return normalizeList(unwrap(res), normalizePrice).filter((p) => p.price_date && p.close_price !== null);
@@ -57,11 +49,9 @@ const newsCache = createCache(async (stockId) => {
   return normalizeList(unwrap(res), normalizeNews);
 });
 
-// GET /stocks/{stockId}/prices — urut lama → baru.
 export function getPrices(stockId, options) {
   return pricesCache.get(Number(stockId), options);
 }
-export const peekPrices = (stockId) => pricesCache.peek(Number(stockId));
 
 export async function getQuote(stockId) {
   const res = await api.get(`/stocks/${stockId}/quote`);
@@ -74,19 +64,14 @@ export async function getQuote(stockId) {
   };
 }
 
-// GET /stocks/{stockId}/indicators — urut lama → baru, nilai bisa null.
 export function getIndicators(stockId, options) {
   return indicatorsCache.get(Number(stockId), options);
 }
-export const peekIndicators = (stockId) => indicatorsCache.peek(Number(stockId));
 
-// GET /stocks/{stockId}/fundamentals — urut terbaru → lama.
 export function getFundamentals(stockId, options) {
   return fundamentalsCache.get(Number(stockId), options);
 }
 
-// GET /stocks/{stockId}/news — urut terbaru → lama. Tidak ada endpoint detail berita.
 export function getNews(stockId, options) {
   return newsCache.get(Number(stockId), options);
 }
-

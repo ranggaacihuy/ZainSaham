@@ -15,6 +15,7 @@ type Config struct {
 	Gemini   Gemini
 	Yahoo    Yahoo
 	News     News
+	Listings Listings
 }
 
 type App struct {
@@ -61,6 +62,11 @@ type News struct {
 	Limit   int
 }
 
+type Listings struct {
+	BaseURL string
+	Limit   int
+}
+
 func Load() Config {
 	_ = godotenv.Load()
 
@@ -102,6 +108,10 @@ func Load() Config {
 		News: News{
 			BaseURL: str("NEWS_BASE_URL", "https://news.google.com"),
 			Limit:   integer("NEWS_LIMIT", 20),
+		},
+		Listings: Listings{
+			BaseURL: str("LISTINGS_BASE_URL", "https://scanner.tradingview.com"),
+			Limit:   integer("LISTINGS_LIMIT", 100),
 		},
 	}
 }

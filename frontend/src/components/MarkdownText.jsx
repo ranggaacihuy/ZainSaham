@@ -1,11 +1,5 @@
 import { Fragment } from 'react';
 
-/**
- * Renderer markdown kecil dan aman (tanpa dangerouslySetInnerHTML).
- * Mendukung: paragraf, heading (#), daftar (-, *, •, 1.), **tebal**, *miring*, `kode`.
- * Struktur lain ditampilkan apa adanya sebagai teks.
- */
-
 const INLINE_PATTERN = /(\*\*[^*]+\*\*|__[^_]+__|`[^`]+`|\*[^*\s][^*]*\*)/g;
 
 function renderInline(text, keyPrefix) {
@@ -79,7 +73,6 @@ function parseBlocks(source) {
       return;
     }
 
-    // Baris lanjutan dari item daftar (diindentasi).
     if (list && /^\s{2,}/.test(raw)) {
       list.items[list.items.length - 1] += ` ${trimmed}`;
       return;
@@ -133,4 +126,3 @@ export default function MarkdownText({ text, className = '' }) {
     </div>
   );
 }
-

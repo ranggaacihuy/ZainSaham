@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
 
-/** Lebar elemen dalam piksel, diperbarui saat ukuran berubah (untuk grafik SVG 1:1). */
 export function useElementWidth(initial = 640) {
   const ref = useRef(null);
   const [width, setWidth] = useState(initial);
@@ -23,4 +22,3 @@ export function useElementWidth(initial = 640) {
 }
 
 export default useElementWidth;
-
