@@ -39,3 +39,20 @@ export async function logoutApi() {
   return true;
 }
 
+export async function updateProfileApi({ name, email, currentPassword, password, passwordConfirmation }) {
+  const res = await api.put('/profile', {
+    name,
+    email,
+    current_password: currentPassword || undefined,
+    password: password || undefined,
+    password_confirmation: passwordConfirmation || undefined,
+  });
+  return normalizeUser(unwrap(res));
+}
+
+export async function deleteAccountApi(password) {
+  const res = await api.delete('/profile', { data: { password } });
+  unwrap(res);
+  return true;
+}
+

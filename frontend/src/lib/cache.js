@@ -42,29 +42,3 @@ export function createCache(fetcher, { ttl = 5 * 60 * 1000 } = {}) {
 
   return { get, peek, invalidate };
 }
-
-/**
- * Jalankan `fn` untuk setiap item dengan konkurensi terbatas.
- * Hasilnya berbentuk seperti Promise.allSettled.
- */
-export async function mapLimit(items, limit, fn) {
-  const results = new Array(items.length);
-  let cursor = 0;
-
-  async function worker() {
-    while (cursor < items.length) {
-      const index = cursor;
-      cursor += 1;
-      try {
-        results[index] = { status: 'fulfilled', value: await fn(items[index], index) };
-      } catch (reason) {
-        results[index] = { status: 'rejected', reason };
-      }
-    }
-  }
-
-  const workers = Array.from({ length: Math.min(limit, items.length) }, worker);
-  await Promise.all(workers);
-  return results;
-}
-

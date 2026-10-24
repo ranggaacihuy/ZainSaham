@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { loginApi, logoutApi, meApi, registerApi } from '../api/auth';
+import { deleteAccountApi, loginApi, logoutApi, meApi, registerApi, updateProfileApi } from '../api/auth';
 import { getAuthToken, setAuthToken } from '../api/client';
 import { normalizeUser } from '../api/normalize';
 
@@ -97,6 +97,21 @@ export function AuthProvider({ children }) {
     }
   }, [clearSession]);
 
+  const updateProfile = useCallback(async (changes) => {
+    const updatedUser = await updateProfileApi(changes);
+    writeStoredUser(updatedUser);
+    setUser(updatedUser);
+    return updatedUser;
+  }, []);
+
+  const deleteAccount = useCallback(
+    async (password) => {
+      await deleteAccountApi(password);
+      clearSession();
+    },
+    [clearSession],
+  );
+
   const value = useMemo(
     () => ({
       user,
@@ -105,8 +120,10 @@ export function AuthProvider({ children }) {
       login,
       register,
       logout,
+      updateProfile,
+      deleteAccount,
     }),
-    [user, loading, login, register, logout],
+    [user, loading, login, register, logout, updateProfile, deleteAccount],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

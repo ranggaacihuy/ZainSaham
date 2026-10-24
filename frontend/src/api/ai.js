@@ -1,7 +1,13 @@
 import api, { unwrap } from './client';
 import config from '../config';
-import { normalizeAnalysis, normalizeList, normalizeMessage, normalizeSession, normalizeStock } from './normalize';
-import { createCache } from '../lib/cache';
+import {
+  normalizeAnalysis,
+  normalizeList,
+  normalizeMessage,
+  normalizeSession,
+  normalizeSessionItem,
+  normalizeStock,
+} from './normalize';
 
 /** Jenis analisis yang dikirim ke backend. "Menyeluruh" di UI dikirim sebagai `combined`. */
 export const ANALYSIS_TYPES = [
@@ -15,31 +21,12 @@ export function analysisTypeLabel(value) {
   return ANALYSIS_TYPES.find((t) => t.value === value)?.label || value || '–';
 }
 
-// GET /stocks/{stockId}/ai-analysis mengembalikan analisis semua user,
-// sehingga hasilnya di-cache per saham lalu difilter per user.
-const analysesCache = createCache(
-  async (stockId) => {
-    const res = await api.get(`/stocks/${stockId}/ai-analysis`);
-    // normalizeAnalysis membuang context_data agar tidak tersimpan di memori/state.
-    return normalizeList(unwrap(res), normalizeAnalysis);
-  },
-  { ttl: 60 * 1000 },
-);
-
-export async function listByStock(stockId, userId, options) {
-  const all = await analysesCache.get(Number(stockId), options);
-  return all.filter((a) => a.session?.user_id === Number(userId));
-}
-
 // POST /ai-analysis → { session, analysis }
-export async function analyze({ userId, stockId, analysisType }) {
-  const res = await api.post(
-    '/ai-analysis',
-    { user_id: userId, stock_id: stockId, analysis_type: analysisType },
-    { timeout: config.aiTimeout },
-  );
+export async function analyze({ userId, stockId, analysisType, sessionId }) {
+  const body = { user_id: userId, stock_id: stockId, analysis_type: analysisType };
+  if (sessionId) body.session_id = sessionId;
+  const res = await api.post('/ai-analysis', body, { timeout: config.aiTimeout });
   const data = unwrap(res);
-  analysesCache.invalidate(Number(stockId));
   const session = normalizeSession(data?.session);
   const analysis = normalizeAnalysis({ ...(data?.analysis || {}), session: data?.session });
   return { session, analysis };
@@ -66,3 +53,24 @@ export async function chatMessages(sessionId) {
   return normalizeList(unwrap(res), normalizeMessage);
 }
 
+export async function listSessions({ kind, stockId } = {}) {
+  const res = await api.get('/ai-sessions', {
+    params: { kind: kind || undefined, stock_id: stockId || undefined },
+  });
+  return normalizeList(unwrap(res), normalizeSessionItem);
+}
+
+export async function getSession(sessionId) {
+  const res = await api.get(`/ai-sessions/${sessionId}`);
+  const data = unwrap(res) || {};
+  return {
+    session: normalizeSessionItem(data.session || {}),
+    analyses: normalizeList(data.analyses, normalizeAnalysis),
+  };
+}
+
+export async function deleteSession(sessionId) {
+  const res = await api.delete(`/ai-sessions/${sessionId}`);
+  unwrap(res);
+  return true;
+}

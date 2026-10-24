@@ -7,7 +7,7 @@ export async function getWatchlist(userId) {
   return normalizeList(unwrap(res), normalizeWatchlistItem);
 }
 
-// POST /watchlists — backend tidak mengecek duplikat, pengecekan dilakukan di WatchlistContext.
+// POST /watchlists — idempoten: saham yang sudah ada mengembalikan data lama.
 export async function addToWatchlist(userId, stockId) {
   const res = await api.post('/watchlists', { user_id: userId, stock_id: stockId });
   return normalizeWatchlistItem(unwrap(res));

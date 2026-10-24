@@ -71,7 +71,7 @@ function toApiError(error) {
   const body = response.data;
   const isJson = body !== null && typeof body === 'object';
 
-  // Respons non-JSON pada 5xx biasanya berarti proxy Vite gagal menghubungi Laravel.
+  // Respons non-JSON pada 5xx biasanya berarti proxy Vite gagal menghubungi backend.
   if (!isJson) {
     return new ApiError({
       status,
@@ -80,7 +80,7 @@ function toApiError(error) {
   }
 
   // Pesan dari controller ZainSaham ({ success: false, message }) sudah berbahasa Indonesia.
-  // Pesan bawaan Laravel (404 findOrFail, 422 validasi) berbahasa Inggris, jadi pakai default.
+  // Respons error tanpa `success: false` (mis. dari proxy) memakai pesan default.
   const ownMessage = body.success === false && typeof body.message === 'string' ? body.message : null;
   const fallback = DEFAULT_MESSAGES[status] || (status >= 500 ? DEFAULT_MESSAGES[500] : 'Permintaan gagal.');
 

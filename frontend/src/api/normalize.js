@@ -1,5 +1,5 @@
-// Normalisasi respons backend Laravel.
-// Kolom desimal dikirim sebagai string (cast decimal:2), jadi dikonversi di sini — sekali saja.
+// Normalisasi respons backend Go (Gin).
+// Kolom angka bisa berupa number atau string, jadi dikonversi di sini — sekali saja.
 
 export function toNumber(value) {
   if (value === null || value === undefined || value === '') return null;
@@ -8,7 +8,7 @@ export function toNumber(value) {
 }
 
 /**
- * Kolom `date` Laravel diserialisasi sebagai ISO UTC ("2026-10-20T00:00:00.000000Z").
+ * Kolom tanggal dikirim sebagai "2026-10-20" atau ISO UTC ("2026-10-20T00:00:00Z").
  * Backend memakai timezone UTC, jadi 10 karakter pertama adalah tanggal yang benar.
  */
 export function toDateKey(value) {
@@ -52,6 +52,24 @@ export function normalizeStock(raw) {
     sector: raw.sector ?? '',
     exchange: raw.exchange ?? '',
     currency: raw.currency ?? '',
+    summary: normalizeSummary(raw.summary),
+  };
+}
+
+export function normalizeSummary(raw) {
+  if (!raw) return null;
+  return {
+    date: toDateKey(raw.price_date),
+    open: toNumber(raw.open_price),
+    high: toNumber(raw.high_price),
+    low: toNumber(raw.low_price),
+    close: toNumber(raw.close_price),
+    prev_close: toNumber(raw.prev_close),
+    change_value: toNumber(raw.change_value),
+    change_pct: toNumber(raw.change_pct),
+    volume: toNumber(raw.volume),
+    rsi_14: toNumber(raw.rsi_14),
+    sparkline: Array.isArray(raw.sparkline) ? raw.sparkline.map(toNumber).filter((v) => v !== null) : [],
   };
 }
 
@@ -80,6 +98,7 @@ export function normalizeIndicator(raw) {
 export function normalizeFundamental(raw) {
   return {
     period: String(raw.period ?? ''),
+    period_type: raw.period_type ?? '',
     revenue: toNumber(raw.revenue),
     net_income: toNumber(raw.net_income),
     total_assets: toNumber(raw.total_assets),
@@ -94,13 +113,17 @@ export function normalizeFundamental(raw) {
 }
 
 export function normalizeNews(raw) {
+  const stock = normalizeStock(raw.stock);
   return {
     news_id: toId(raw.news_id),
+    stock_id: toId(raw.stock_id),
+    ticker: stock?.ticker ?? '',
     title: raw.title ?? '',
     content: raw.content ?? '',
     source: raw.source ?? '',
     source_url: raw.source_url || null,
     published_at: raw.published_at ?? null,
+    stock,
   };
 }
 
@@ -111,6 +134,7 @@ export function normalizeWatchlistItem(raw) {
     stock_id: toId(raw.stock_id),
     created_at: raw.created_at ?? null,
     stock: normalizeStock(raw.stock),
+    summary: normalizeSummary(raw.summary),
   };
 }
 
@@ -135,6 +159,18 @@ export function normalizeAnalysis(raw) {
     result: toText(raw.result),
     created_at: raw.created_at ?? null,
     session: normalizeSession(raw.session),
+    stock: normalizeStock(raw.stock),
+  };
+}
+
+export function normalizeSessionItem(raw) {
+  return {
+    ...normalizeSession(raw),
+    kind: raw.kind === 'chat' ? 'chat' : 'analysis',
+    analyses_count: toNumber(raw.analyses_count) ?? 0,
+    messages_count: toNumber(raw.messages_count) ?? 0,
+    preview: raw.preview ?? '',
+    stock: normalizeStock(raw.stock),
   };
 }
 

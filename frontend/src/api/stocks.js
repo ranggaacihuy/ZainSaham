@@ -9,10 +9,25 @@ import {
 } from './normalize';
 import { createCache } from '../lib/cache';
 
-// GET /stocks — semua saham (tanpa paginasi, tanpa harga).
+// GET /stocks — semua saham beserta ringkasan harga terakhir.
 export async function getStocks() {
   const res = await api.get('/stocks');
   return normalizeList(unwrap(res), normalizeStock);
+}
+
+export async function searchStocks({ q = '', sector = '', page = 1, perPage = 20 } = {}) {
+  const res = await api.get('/stocks', {
+    params: { q: q || undefined, sector: sector || undefined, page, per_page: perPage },
+  });
+  const items = normalizeList(unwrap(res), normalizeStock);
+  const meta = res.data?.meta || {};
+  return {
+    items,
+    page: Number(meta.page) || page,
+    lastPage: Number(meta.last_page) || 1,
+    total: Number(meta.total) || 0,
+    sectors: Array.isArray(meta.sectors) ? meta.sectors : [],
+  };
 }
 
 // GET /stocks/{stockId}

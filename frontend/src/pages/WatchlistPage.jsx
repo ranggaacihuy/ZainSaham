@@ -19,14 +19,7 @@ import {
 } from '../components/ui';
 import ConfirmModal from '../components/ConfirmModal';
 import { useWatchlist } from '../context/WatchlistContext';
-import { useLatestRsi, usePriceSummaries } from '../hooks/useStockData';
 import { date, idr, number } from '../lib/format';
-
-function LazyCell({ status, children, width = 'w-14' }) {
-  if (!status || status === 'loading') return <Skeleton className={`ml-auto h-4 ${width}`} />;
-  if (status === 'error') return <span className="text-text-muted">–</span>;
-  return children;
-}
 
 function rsiTone(rsi) {
   if (rsi === null || rsi === undefined) return 'text-text-muted';
@@ -39,11 +32,6 @@ export default function WatchlistPage() {
   const watchlist = useWatchlist();
   const [toRemove, setToRemove] = useState(null);
   const [removing, setRemoving] = useState(false);
-
-  const ids = watchlist.items.map((item) => item.stock_id);
-  const { summaries } = usePriceSummaries(ids);
-  // RSI diambil dari indikator terakhir tiap saham (lazy).
-  const { rsi } = useLatestRsi(ids);
 
   const confirmRemove = async () => {
     if (!toRemove) return;
@@ -125,8 +113,7 @@ export default function WatchlistPage() {
               <TBody>
                 {watchlist.items.map((item) => {
                   const ticker = item.stock?.ticker || `#${item.stock_id}`;
-                  const price = summaries[item.stock_id];
-                  const rsiEntry = rsi[item.stock_id];
+                  const summary = item.summary;
                   return (
                     <Tr key={item.watchlist_id} onClick={() => item.stock && navigate(`/stocks/${item.stock.ticker}`)}>
                       <Td className="font-semibold text-text">{ticker}</Td>
@@ -134,19 +121,13 @@ export default function WatchlistPage() {
                         {item.stock?.company_name || '–'}
                       </Td>
                       <Td num className="text-text">
-                        <LazyCell status={price?.status} width="w-16">
-                          {idr(price?.summary?.close)}
-                        </LazyCell>
+                        {idr(summary?.close)}
                       </Td>
                       <Td num>
-                        <LazyCell status={price?.status}>
-                          <Change pctValue={price?.summary?.change_pct} />
-                        </LazyCell>
+                        <Change pctValue={summary?.change_pct} />
                       </Td>
-                      <Td num className={rsiTone(rsiEntry?.rsi)}>
-                        <LazyCell status={rsiEntry?.status} width="w-10">
-                          {number(rsiEntry?.rsi)}
-                        </LazyCell>
+                      <Td num className={rsiTone(summary?.rsi_14)}>
+                        {number(summary?.rsi_14)}
                       </Td>
                       <Td num className="hidden text-text-muted md:table-cell">
                         {date(item.created_at)}

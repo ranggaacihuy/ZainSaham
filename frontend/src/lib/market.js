@@ -1,4 +1,4 @@
-// Perhitungan pasar di sisi frontend (backend belum menyediakan ringkasan).
+// Perhitungan pasar di sisi frontend untuk grafik dan halaman detail saham.
 
 /**
  * Ringkasan harga dari array harga (urut lama → baru).
@@ -60,16 +60,6 @@ export function filterByRange(items, range, dateField = 'price_date') {
   };
 }
 
-/** Nilai terakhir yang tidak null untuk field tertentu. */
-export function lastValue(items, field) {
-  if (!Array.isArray(items)) return null;
-  for (let i = items.length - 1; i >= 0; i -= 1) {
-    const value = items[i]?.[field];
-    if (value !== null && value !== undefined) return value;
-  }
-  return null;
-}
-
 /**
  * Deskripsi indikator teknikal terakhir.
  * tone: 'up' | 'down' | 'warn' | 'neutral'
@@ -110,12 +100,20 @@ export function describeIndicators(indicator, lastClose) {
 }
 
 /**
- * Klasifikasi periode fundamental berdasarkan pola teks.
+ * Klasifikasi periode fundamental berdasarkan `period_type` dari backend (atau pola teks bila kosong).
  * Toggle kuartalan/tahunan hanya ditampilkan bila SEMUA periode bisa diklasifikasikan
  * dan kedua jenis memang ada. Selain itu tampilkan semua periode apa adanya.
  */
 const ANNUAL_PATTERN = /^(FY\s?)?\d{4}$/i;
 const QUARTER_PATTERN = /^(\d{4}[\s\-/]?Q[1-4]|Q[1-4][\s\-/]?\d{4})$/i;
+
+function periodType(fundamental) {
+  if (fundamental.period_type) return fundamental.period_type;
+  const period = fundamental.period.trim();
+  if (QUARTER_PATTERN.test(period)) return 'quarterly';
+  if (ANNUAL_PATTERN.test(period)) return 'annual';
+  return '';
+}
 
 export function classifyPeriods(fundamentals) {
   if (!Array.isArray(fundamentals) || fundamentals.length === 0) {
@@ -125,9 +123,9 @@ export function classifyPeriods(fundamentals) {
   const annual = [];
   let unknown = 0;
   fundamentals.forEach((f) => {
-    const period = f.period.trim();
-    if (QUARTER_PATTERN.test(period)) quarterly.push(f);
-    else if (ANNUAL_PATTERN.test(period)) annual.push(f);
+    const type = periodType(f);
+    if (type === 'quarterly') quarterly.push(f);
+    else if (type === 'annual') annual.push(f);
     else unknown += 1;
   });
   return {

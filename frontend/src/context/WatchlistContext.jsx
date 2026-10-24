@@ -8,46 +8,35 @@ const WatchlistContext = createContext(null);
 /**
  * State watchlist bersama untuk seluruh halaman.
  * - Tambah/hapus memakai watchlist_id dari backend.
- * - Duplikat dicegah di sini karena backend tidak mengeceknya.
  * - Setelah tambah/hapus, daftar dimuat ulang tanpa reload halaman.
  */
 export function WatchlistProvider({ children }) {
   const { user } = useAuth();
   const { addToast } = useToast();
-  const [items, setItems] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const userId = user?.user_id || null;
+  const [state, setState] = useState({ userId: null, items: [], error: null, loaded: false });
   const [pendingIds, setPendingIds] = useState(() => new Set());
   const requestId = useRef(0);
   const pendingRef = useRef(new Set());
-  const userId = user?.user_id || null;
 
-  const reload = useCallback(
-    async ({ silent = false } = {}) => {
-      if (!userId) {
-        setItems([]);
-        setError(null);
-        setLoading(false);
-        return [];
+  const current = state.userId === userId ? state : { userId, items: [], error: null, loaded: !userId };
+  const { items, error } = current;
+  const loading = Boolean(userId) && !current.loaded;
+
+  const reload = useCallback(async () => {
+    if (!userId) return [];
+    const id = ++requestId.current;
+    try {
+      const list = await getWatchlist(userId);
+      if (id === requestId.current) setState({ userId, items: list, error: null, loaded: true });
+      return list;
+    } catch (err) {
+      if (id === requestId.current) {
+        setState((prev) => ({ userId, items: prev.userId === userId ? prev.items : [], error: err, loaded: true }));
       }
-      const id = ++requestId.current;
-      if (!silent) setLoading(true);
-      try {
-        const list = await getWatchlist(userId);
-        if (id === requestId.current) {
-          setItems(list);
-          setError(null);
-        }
-        return list;
-      } catch (err) {
-        if (id === requestId.current && !silent) setError(err);
-        throw err;
-      } finally {
-        if (id === requestId.current) setLoading(false);
-      }
-    },
-    [userId],
-  );
+      throw err;
+    }
+  }, [userId]);
 
   useEffect(() => {
     reload().catch(() => {});
@@ -72,14 +61,8 @@ export function WatchlistProvider({ children }) {
       }
       setPending(stock.stock_id, true);
       try {
-        // Cek ulang ke server sebelum POST agar tidak membuat duplikat dari tab lain.
-        const fresh = await reload({ silent: true });
-        if (fresh.some((item) => item.stock_id === stock.stock_id)) {
-          addToast(`${stock.ticker} sudah ada di watchlist.`, 'info');
-          return false;
-        }
         await addToWatchlist(userId, stock.stock_id);
-        await reload({ silent: true }).catch(() => {});
+        await reload().catch(() => {});
         addToast(`${stock.ticker} ditambahkan ke watchlist.`, 'success');
         return true;
       } catch (err) {
@@ -99,8 +82,8 @@ export function WatchlistProvider({ children }) {
       setPending(stockId, true);
       try {
         await removeFromWatchlist(item.watchlist_id);
-        setItems((prev) => prev.filter((i) => i.watchlist_id !== item.watchlist_id));
-        await reload({ silent: true }).catch(() => {});
+        setState((prev) => ({ ...prev, items: prev.items.filter((i) => i.watchlist_id !== item.watchlist_id) }));
+        await reload().catch(() => {});
         addToast(`${item.stock?.ticker || 'Saham'} dihapus dari watchlist.`, 'success');
         return true;
       } catch (err) {
