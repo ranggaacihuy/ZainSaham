@@ -17,6 +17,13 @@ const MODES = [
   { value: 'line', label: 'Garis' },
 ];
 
+function candleWidth(slot) {
+  if (slot < 2) return Math.max(0.5, slot);
+  const width = Math.max(1, Math.round(slot - Math.max(1, slot * 0.2)));
+  if (width < 6 || width % 2 === 1) return width;
+  return width + 1 <= slot - 1 ? width + 1 : width - 1;
+}
+
 function niceTicks(min, max, count = 4) {
   if (max === min) return [min];
   const step = (max - min) / count;
@@ -52,6 +59,9 @@ export default function StockChart({ prices = [], currentRange = '3B', onRangeCh
   const count = prices.length;
   const slot = count > 0 ? plotW / count : plotW;
   const getX = (i) => LEFT_PAD + slot * i + slot / 2;
+  const barWidth = candleWidth(slot);
+  const barLeft = (i) => (slot < 2 ? getX(i) - barWidth / 2 : Math.round(getX(i) - barWidth / 2));
+  const wickX = (i) => (slot < 2 ? getX(i) : barLeft(i) + Math.floor(barWidth / 2) + 0.5);
   const getY = (v) => {
     const range = geometry.yMax - geometry.yMin || 1;
     return 8 + (1 - (v - geometry.yMin) / range) * (PRICE_H - 16);
@@ -159,15 +169,17 @@ export default function StockChart({ prices = [], currentRange = '3B', onRangeCh
                   const high = p.high_price ?? Math.max(open, p.close_price);
                   const low = p.low_price ?? Math.min(open, p.close_price);
                   const up = p.close_price >= open;
-                  const x = getX(i);
-                  const w = Math.max(1, Math.min(9, slot * 0.6));
-                  const top = getY(Math.max(open, p.close_price));
-                  const h = Math.max(1, Math.abs(getY(open) - getY(p.close_price)));
-                  const tone = up ? 'up' : 'down';
+                  const x = wickX(i);
+                  const top = Math.round(getY(Math.max(open, p.close_price)));
+                  const h = Math.max(1, Math.round(Math.abs(getY(open) - getY(p.close_price))));
                   return (
-                    <g key={p.price_date} className={tone === 'up' ? 'fill-up stroke-up' : 'fill-down stroke-down'}>
-                      <line x1={x} x2={x} y1={getY(high)} y2={getY(low)} strokeWidth="1" />
-                      <rect x={x - w / 2} y={top} width={w} height={h} stroke="none" />
+                    <g
+                      key={p.price_date}
+                      className={up ? 'fill-up stroke-up' : 'fill-down stroke-down'}
+                      shapeRendering={slot < 2 ? undefined : 'crispEdges'}
+                    >
+                      <line x1={x} x2={x} y1={Math.round(getY(high))} y2={Math.round(getY(low))} strokeWidth="1" />
+                      <rect x={barLeft(i)} y={top} width={barWidth} height={h} stroke="none" />
                     </g>
                   );
                 })
@@ -177,15 +189,15 @@ export default function StockChart({ prices = [], currentRange = '3B', onRangeCh
               {prices.map((p, i) => {
                 const h = getVolH(p.volume);
                 const up = p.close_price >= (p.open_price ?? p.close_price);
-                const w = Math.max(1, Math.min(8, slot * 0.6));
                 return (
                   <rect
                     key={`v-${p.price_date}`}
-                    x={getX(i) - w / 2}
+                    x={barLeft(i)}
                     y={volTop + VOL_H - h}
-                    width={w}
+                    width={barWidth}
                     height={h}
                     className={up ? 'fill-up/40' : 'fill-down/40'}
+                    shapeRendering={slot < 2 ? undefined : 'crispEdges'}
                   />
                 );
               })}
