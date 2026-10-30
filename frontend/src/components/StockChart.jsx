@@ -35,6 +35,19 @@ function setupPriceChart(chart, colors) {
     line,
     volume,
     volumeColors: { up: withAlpha(colors.up, 0.4), down: withAlpha(colors.down, 0.4) },
+    applyTheme(nextColors) {
+      candle.applyOptions({
+        upColor: nextColors.up,
+        downColor: nextColors.down,
+        wickUpColor: nextColors.up,
+        wickDownColor: nextColors.down,
+      });
+      line.applyOptions({ color: nextColors.accent });
+      this.volumeColors = { up: withAlpha(nextColors.up, 0.4), down: withAlpha(nextColors.down, 0.4) };
+      if (this.bars) {
+        volume.setData(this.bars.map((p) => volumeOf(p, this.volumeColors)));
+      }
+    },
   };
 }
 
@@ -96,7 +109,7 @@ export default function StockChart({ prices = [], timeframe = '1H', onTimeframeC
   const formatPrice = index ? (value) => number(value, 2) : idr;
 
   return (
-    <div className="rounded-xl border border-border bg-surface">
+    <div className="rounded-cards bg-surface shadow-subtle">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3">
         <Tabs
           variant="segmented"

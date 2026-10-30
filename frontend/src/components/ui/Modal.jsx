@@ -35,32 +35,32 @@ export function Modal({ open, onClose, title, children, footer, size = 'md', ini
 
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-end justify-center p-0 sm:items-start sm:p-4 sm:pt-[10vh]">
-      <div className="absolute inset-0 bg-black/60" onClick={onClose} aria-hidden="true" />
+      <div className="absolute inset-0 bg-void/50 backdrop-blur-[2px]" onClick={onClose} aria-hidden="true" />
       <div
         ref={panelRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby={title ? titleId : undefined}
         tabIndex={-1}
-        className={`relative flex max-h-[90vh] w-full ${width} flex-col rounded-t-xl border border-border bg-surface focus:outline-none sm:rounded-xl`}
+        className={`relative flex max-h-[90vh] w-full ${width} flex-col rounded-t-images border border-border bg-surface focus:outline-none sm:rounded-cards`}
       >
         {title && (
-          <div className="flex items-start justify-between gap-4 border-b border-border px-5 py-4">
-            <h2 id={titleId} className="text-base font-semibold text-text">
+          <div className="flex items-start justify-between gap-4 border-b border-border px-6 py-5">
+            <h2 id={titleId} className="text-body-lg font-medium text-text">
               {title}
             </h2>
             <button
               type="button"
               onClick={onClose}
               aria-label="Tutup"
-              className="-mr-1 rounded-lg p-1 text-text-muted transition-colors duration-150 hover:bg-surface-2 hover:text-text"
+              className="-mr-1.5 flex h-8 w-8 items-center justify-center rounded-full text-text-muted transition-colors duration-150 hover:bg-surface-2 hover:text-text"
             >
-              <X className="h-4 w-4" />
+              <X className="h-4 w-4" strokeWidth={1.75} />
             </button>
           </div>
         )}
-        <div className="overflow-y-auto px-5 py-4">{children}</div>
-        {footer && <div className="flex justify-end gap-2 border-t border-border px-5 py-3">{footer}</div>}
+        <div className="overflow-y-auto px-6 py-5">{children}</div>
+        {footer && <div className="flex justify-end gap-2 border-t border-border px-6 py-4">{footer}</div>}
       </div>
     </div>,
     document.body,

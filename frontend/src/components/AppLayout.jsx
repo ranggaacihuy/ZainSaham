@@ -1,8 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { Bookmark, History, LayoutDashboard, LineChart, LogOut, MessageSquareText, Search, User } from 'lucide-react';
+import { Bookmark, History, LayoutDashboard, LineChart, LogOut, MessageSquareText, Moon, Sun } from 'lucide-react';
 import { displayName, useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
 import SearchModal from './SearchModal';
+import { Logo } from './ui/Logo';
 
 const NAV_ITEMS = [
   { label: 'Dashboard', short: 'Dashboard', path: '/dashboard', icon: LayoutDashboard, match: ['/dashboard', '/'] },
@@ -10,7 +12,6 @@ const NAV_ITEMS = [
   { label: 'Watchlist', short: 'Watchlist', path: '/watchlist', icon: Bookmark, match: ['/watchlist'] },
   { label: 'Analisis AI', short: 'Analisis', path: '/ai-analysis', icon: MessageSquareText, match: ['/ai-analysis'] },
   { label: 'Riwayat', short: 'Riwayat', path: '/analysis-history', icon: History, match: ['/analysis-history'] },
-  { label: 'Profil', short: 'Profil', path: '/profile', icon: User, match: ['/profile'] },
 ];
 
 function isActive(item, pathname) {
@@ -19,20 +20,33 @@ function isActive(item, pathname) {
 
 function Brand() {
   return (
-    <NavLink to="/dashboard" className="flex items-center gap-2.5 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
-      <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent text-accent-ink" aria-hidden="true">
-        <LineChart className="h-4 w-4" strokeWidth={2.5} />
-      </span>
-      <span className="text-base font-semibold text-text">ZainSaham</span>
+    <NavLink
+      to="/dashboard"
+      aria-label="ZainSaham — Dashboard"
+      className="flex items-center rounded-badges focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-iris"
+    >
+      <Logo />
     </NavLink>
+  );
+}
+
+function initials(name) {
+  return (
+    String(name || '?')
+      .trim()
+      .split(/\s+/)
+      .slice(0, 2)
+      .map((part) => part[0])
+      .join('')
+      .toUpperCase() || '?'
   );
 }
 
 export default function AppLayout() {
   const { user, logout } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const location = useLocation();
   const navigate = useNavigate();
-  const [searchOpen, setSearchOpen] = useState(false);
 
   const onLogout = async () => {
     await logout();
@@ -40,108 +54,95 @@ export default function AppLayout() {
   };
 
   useEffect(() => {
-    const onKey = (event) => {
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
-        event.preventDefault();
-        setSearchOpen(true);
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, []);
-
-  useEffect(() => {
     window.scrollTo(0, 0);
   }, [location.pathname]);
 
-  const current = NAV_ITEMS.find((item) => isActive(item, location.pathname));
-  const mobileItems = NAV_ITEMS.slice(0, 5);
+  const current =
+    NAV_ITEMS.find((item) => isActive(item, location.pathname)) ||
+    (location.pathname.startsWith('/profile') ? { label: 'Profil' } : null);
+  const mobileItems = NAV_ITEMS;
+  const name = displayName(user);
+  const isDark = theme === 'dark';
 
   return (
-    <div className="min-h-screen bg-bg text-text md:flex">
-      <SearchModal open={searchOpen} onClose={() => setSearchOpen(false)} />
-
-      <aside className="sticky top-0 hidden h-screen w-58 shrink-0 flex-col border-r border-border bg-surface md:flex">
-        <div className="flex h-14 items-center px-5">
-          <Brand />
-        </div>
-        <nav aria-label="Navigasi utama" className="flex-1 space-y-0.5 px-3 py-3">
-          {NAV_ITEMS.map((item) => {
-            const active = isActive(item, location.pathname);
-            const Icon = item.icon;
-            return (
-              <NavLink
-                key={item.path}
-                to={item.path}
-                aria-current={active ? 'page' : undefined}
-                className={`relative flex h-9 items-center gap-3 rounded-lg px-3 text-sm transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
-                  active ? 'bg-surface-2 font-medium text-text' : 'text-text-muted hover:bg-surface-2 hover:text-text'
-                }`}
-              >
-                {active && <span className="absolute inset-y-1.5 left-0 w-0.5 rounded-full bg-accent" aria-hidden="true" />}
-                <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
-                {item.label}
-              </NavLink>
-            );
-          })}
-        </nav>
-        <div className="flex items-center justify-between gap-2 border-t border-border px-5 py-4">
-          <div className="min-w-0">
-            <p className="truncate text-sm font-medium text-text">{displayName(user)}</p>
-            <p className="truncate text-xs text-text-muted">{user?.email || `ID pengguna ${user?.user_id}`}</p>
-          </div>
-          <button
-            type="button"
-            onClick={onLogout}
-            title="Keluar"
-            aria-label="Keluar dari akun"
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-text-muted transition-colors duration-150 hover:bg-surface-2 hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-          >
-            <LogOut className="h-4 w-4" aria-hidden="true" />
-          </button>
-        </div>
-      </aside>
-
-      <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-30 flex h-14 items-center justify-between gap-3 border-b border-border bg-bg px-4 sm:px-6">
+    <div className="min-h-screen bg-bg text-text">
+      <header className="sticky top-0 z-30 border-b border-border bg-surface">
+        <div className="relative flex h-16 w-full items-center justify-between gap-4 px-6">
           <div className="flex min-w-0 items-center gap-3">
-            <div className="md:hidden">
-              <Brand />
-            </div>
-            <p className="hidden truncate text-sm font-medium text-text md:block">{current?.label || 'ZainSaham'}</p>
+            <Brand />
+            <span className="hidden truncate text-sm text-text-muted sm:inline lg:hidden">/ {current?.label || 'ZainSaham'}</span>
           </div>
+
+          <nav
+            aria-label="Navigasi utama"
+            className="hidden items-center gap-1 lg:absolute lg:left-1/2 lg:flex lg:-translate-x-1/2"
+          >
+            {NAV_ITEMS.map((item) => {
+              const active = isActive(item, location.pathname);
+              return (
+                <NavLink
+                  key={item.path}
+                  to={item.path}
+                  aria-current={active ? 'page' : undefined}
+                  className={`flex h-9 items-center rounded-badges px-4 text-xs font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-iris ${
+                    active ? 'bg-accent text-accent-ink' : 'text-text-muted hover:bg-surface-2 hover:text-text'
+                  }`}
+                >
+                  {item.label}
+                </NavLink>
+              );
+            })}
+          </nav>
+
           <div className="flex items-center gap-2">
+            <SearchModal enableShortcut align="right" />
+
             <button
               type="button"
-              onClick={() => setSearchOpen(true)}
-              className="flex h-9 items-center gap-2 rounded-lg border border-border bg-surface px-3 text-sm text-text-muted transition-colors duration-150 hover:bg-surface-2 hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent sm:w-64"
-              aria-label="Cari saham"
+              onClick={toggleTheme}
+              title={isDark ? 'Mode terang' : 'Mode gelap'}
+              aria-label={isDark ? 'Beralih ke mode terang' : 'Beralih ke mode gelap'}
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-badges border border-border bg-surface-2 text-text-muted transition-colors duration-150 hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-iris"
             >
-              <Search className="h-4 w-4 shrink-0" aria-hidden="true" />
-              <span className="hidden flex-1 text-left sm:inline">Cari saham</span>
-              <kbd className="hidden rounded border border-border px-1.5 text-xs text-text-muted sm:inline">Ctrl K</kbd>
+              {isDark ? (
+                <Sun className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+              ) : (
+                <Moon className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+              )}
             </button>
+
             <button
               type="button"
               onClick={() => navigate('/profile')}
               aria-label="Profil"
-              className={`flex h-9 w-9 items-center justify-center rounded-lg border border-border transition-colors duration-150 hover:bg-surface-2 md:hidden ${
-                location.pathname === '/profile' ? 'text-text' : 'text-text-muted'
+              title={name}
+              className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-badges bg-accent text-xs font-medium text-accent-ink transition-opacity duration-150 hover:opacity-85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-iris focus-visible:ring-offset-2 ${
+                location.pathname === '/profile' ? 'ring-2 ring-border-strong ring-offset-2 ring-offset-surface' : ''
               }`}
             >
-              <User className="h-4 w-4" />
+              {initials(name)}
+            </button>
+
+            <button
+              type="button"
+              onClick={onLogout}
+              title="Keluar"
+              aria-label="Keluar dari akun"
+              className="hidden h-9 w-9 shrink-0 items-center justify-center rounded-badges text-text-muted transition-colors duration-150 hover:bg-surface-2 hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-iris sm:flex"
+            >
+              <LogOut className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
             </button>
           </div>
-        </header>
+        </div>
+      </header>
 
-        <main className="mx-auto w-full max-w-7xl flex-1 px-4 pb-24 pt-6 sm:px-6 md:pb-10">
-          <Outlet />
-        </main>
-      </div>
+      <main className="w-full flex-1 px-6 pb-28 pt-8 lg:pb-16 lg:pt-8">
+        <Outlet />
+      </main>
 
       <nav
         aria-label="Navigasi utama"
-        className="fixed inset-x-0 bottom-0 z-30 grid h-16 grid-cols-5 border-t border-border bg-surface md:hidden"
+        className="fixed inset-x-3 bottom-3 z-30 grid h-16 grid-cols-5 rounded-badges border border-border bg-surface/95 backdrop-blur-md lg:hidden"
       >
         {mobileItems.map((item) => {
           const active = isActive(item, location.pathname);
@@ -151,12 +152,17 @@ export default function AppLayout() {
               key={item.path}
               to={item.path}
               aria-current={active ? 'page' : undefined}
-              className={`relative flex flex-col items-center justify-center gap-1 text-xs transition-colors duration-150 ${
-                active ? 'text-text' : 'text-text-muted'
+              className={`relative flex flex-col items-center justify-center gap-1 text-micro transition-colors duration-150 ${
+                active ? 'font-medium text-text' : 'text-text-muted'
               }`}
             >
-              {active && <span className="absolute inset-x-4 top-0 h-0.5 rounded-full bg-accent" aria-hidden="true" />}
-              <Icon className="h-5 w-5" aria-hidden="true" />
+              <span
+                className={`flex h-7 w-12 items-center justify-center rounded-badges transition-colors duration-150 ${
+                  active ? 'bg-accent text-accent-ink' : ''
+                }`}
+              >
+                <Icon className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+              </span>
               {item.short}
             </NavLink>
           );

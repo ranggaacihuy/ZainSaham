@@ -10,7 +10,7 @@ import { date, idr, number } from '../lib/format';
 const indicatorFormat = priceFormat(2);
 
 function paneLabel(pane, text, colors) {
-  createTextWatermark(pane, {
+  return createTextWatermark(pane, {
     horzAlign: 'left',
     vertAlign: 'top',
     lines: [{ text, color: colors.muted, fontSize: 12 }],
@@ -26,7 +26,7 @@ function setupIndicatorChart(chart, colors) {
     autoscaleInfoProvider: () => ({ priceRange: { minValue: 0, maxValue: 100 } }),
   });
   rsi.priceScale().applyOptions({ scaleMargins: { top: 0.1, bottom: 0.1 } });
-  [70, 30].forEach((price) =>
+  const rsiLines = [70, 30].map((price) =>
     rsi.createPriceLine({ price, color: colors.muted, lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: true }),
   );
 
@@ -41,8 +41,8 @@ function setupIndicatorChart(chart, colors) {
   const [rsiPane, macdPane] = chart.panes();
   rsiPane.setStretchFactor(1);
   macdPane.setStretchFactor(1);
-  paneLabel(rsiPane, 'RSI (14)', colors);
-  paneLabel(macdPane, 'MACD (12, 26, 9)', colors);
+  const rsiWatermark = paneLabel(rsiPane, 'RSI (14)', colors);
+  const macdWatermark = paneLabel(macdPane, 'MACD (12, 26, 9)', colors);
 
   return {
     rsi,
@@ -50,6 +50,18 @@ function setupIndicatorChart(chart, colors) {
     macd,
     signal,
     histogramColors: { up: withAlpha(colors.up, 0.5), down: withAlpha(colors.down, 0.5) },
+    applyTheme(nextColors) {
+      rsi.applyOptions({ color: nextColors.accent });
+      macd.applyOptions({ color: nextColors.accent });
+      signal.applyOptions({ color: nextColors.muted });
+      rsiLines.forEach((pl) => pl.applyOptions({ color: nextColors.muted }));
+      rsiWatermark?.applyOptions?.({ lines: [{ text: 'RSI (14)', color: nextColors.muted, fontSize: 12 }] });
+      macdWatermark?.applyOptions?.({ lines: [{ text: 'MACD (12, 26, 9)', color: nextColors.muted, fontSize: 12 }] });
+      this.histogramColors = { up: withAlpha(nextColors.up, 0.5), down: withAlpha(nextColors.down, 0.5) };
+      if (this.history) {
+        histogram.setData(this.history.map((h) => histogramOf(h, this.histogramColors)));
+      }
+    },
   };
 }
 
@@ -65,12 +77,12 @@ function histogramOf(h, colors) {
 
 function SummaryCard({ label, value, info }) {
   return (
-    <div className="rounded-xl border border-border bg-surface p-4">
+    <div className="rounded-cards bg-surface p-4 shadow-subtle">
       <div className="flex items-center justify-between gap-2">
         <span className="text-xs text-text-muted">{label}</span>
         <Badge tone={info.tone}>{info.label}</Badge>
       </div>
-      <div className="num mt-2 text-xl font-semibold text-text">{value}</div>
+      <div className="num mt-2 text-xl font-medium text-text">{value}</div>
     </div>
   );
 }
@@ -134,7 +146,7 @@ export default function TechnicalChart({ prices = [], description, timeframe = '
       </div>
       {d.date && <p className="text-xs text-text-muted">Indikator harian per {date(d.date)}.</p>}
 
-      <div className="rounded-xl border border-border bg-surface">
+      <div className="rounded-cards bg-surface shadow-subtle">
         <div className="border-b border-border px-4 py-3">
           <Tabs
             variant="segmented"

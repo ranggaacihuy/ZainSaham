@@ -1,11 +1,24 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { LogOut, Trash2 } from 'lucide-react';
-import { Button, Card, Field, Input, Modal, PageHeader } from '../components/ui';
+import { Button, Field, Input, Modal, PageHeader } from '../components/ui';
 import { displayName, useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { fieldError } from '../api/client';
 import { date } from '../lib/format';
+
+function initials(name) {
+  const parts = String(name || '')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+  if (!parts.length) return 'U';
+  return parts
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join('')
+    .toUpperCase();
+}
 
 function FormError({ error }) {
   if (!error || Object.keys(error.fieldErrors || {}).length > 0) return null;
@@ -40,8 +53,8 @@ function ProfileForm({ user, onSave }) {
   };
 
   return (
-    <Card title="Ubah profil" description="Perbarui nama dan email akun Anda.">
-      <form onSubmit={onSubmit} className="space-y-4">
+    <form onSubmit={onSubmit} className="overflow-hidden rounded-cards bg-surface shadow-subtle">
+      <div className="space-y-4 p-5 sm:p-6">
         <FormError error={error} />
         <Field label="Nama" htmlFor="profile-name" error={fieldError(error, 'name')}>
           <Input id="profile-name" required value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" />
@@ -66,11 +79,13 @@ function ProfileForm({ user, onSave }) {
             />
           </Field>
         )}
+      </div>
+      <div className="flex items-center justify-end border-t border-border bg-bg/40 px-5 py-3.5 sm:px-6">
         <Button type="submit" variant="primary" disabled={saving}>
           {saving ? 'Menyimpan…' : 'Simpan perubahan'}
         </Button>
-      </form>
-    </Card>
+      </div>
+    </form>
   );
 }
 
@@ -101,8 +116,8 @@ function PasswordForm({ user, onSave }) {
   };
 
   return (
-    <Card title="Ubah kata sandi" description="Gunakan minimal 8 karakter.">
-      <form onSubmit={onSubmit} className="space-y-4">
+    <form onSubmit={onSubmit} className="overflow-hidden rounded-cards bg-surface shadow-subtle">
+      <div className="space-y-4 p-5 sm:p-6">
         <FormError error={error} />
         <Field label="Kata sandi saat ini" htmlFor="password-current" error={fieldError(error, 'current_password')}>
           <Input
@@ -114,32 +129,36 @@ function PasswordForm({ user, onSave }) {
             autoComplete="current-password"
           />
         </Field>
-        <Field label="Kata sandi baru" htmlFor="password-new" error={fieldError(error, 'password')}>
-          <Input
-            id="password-new"
-            type="password"
-            required
-            minLength={8}
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            autoComplete="new-password"
-          />
-        </Field>
-        <Field label="Ulangi kata sandi baru" htmlFor="password-confirm">
-          <Input
-            id="password-confirm"
-            type="password"
-            required
-            value={passwordConfirmation}
-            onChange={(e) => setPasswordConfirmation(e.target.value)}
-            autoComplete="new-password"
-          />
-        </Field>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field label="Kata sandi baru" htmlFor="password-new" error={fieldError(error, 'password')}>
+            <Input
+              id="password-new"
+              type="password"
+              required
+              minLength={8}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              autoComplete="new-password"
+            />
+          </Field>
+          <Field label="Ulangi kata sandi baru" htmlFor="password-confirm">
+            <Input
+              id="password-confirm"
+              type="password"
+              required
+              value={passwordConfirmation}
+              onChange={(e) => setPasswordConfirmation(e.target.value)}
+              autoComplete="new-password"
+            />
+          </Field>
+        </div>
+      </div>
+      <div className="flex items-center justify-end border-t border-border bg-bg/40 px-5 py-3.5 sm:px-6">
         <Button type="submit" variant="primary" disabled={saving}>
           {saving ? 'Menyimpan…' : 'Ubah kata sandi'}
         </Button>
-      </form>
-    </Card>
+      </div>
+    </form>
   );
 }
 
@@ -233,57 +252,101 @@ export default function ProfilePage() {
     navigate('/login', { replace: true });
   };
 
-  const rows = [
-    { label: 'ID pengguna', value: user?.user_id ?? '–', num: true },
-    { label: 'Nama', value: user?.name || displayName(user) },
-    { label: 'Email', value: user?.email || '–' },
-    ...(user?.created_at ? [{ label: 'Tanggal bergabung', value: date(user.created_at) }] : []),
-  ];
+  const name = user?.name || displayName(user);
 
   return (
-    <>
+    <div className="mx-auto w-full max-w-5xl">
       <PageHeader title="Profil" description="Kelola informasi akun yang aktif pada sesi ini." />
 
       <DeleteAccountModal open={confirmDelete} onClose={() => setConfirmDelete(false)} onConfirm={onDelete} />
 
-      <div className="max-w-xl space-y-4">
-        <Card title="Akun" padded={false}>
-          <dl>
-            {rows.map((row) => (
-              <div
-                key={row.label}
-                className="flex flex-col gap-1 border-b border-border px-4 py-3 last:border-b-0 sm:flex-row sm:items-center sm:justify-between sm:px-5"
-              >
-                <dt className="text-xs text-text-muted">{row.label}</dt>
-                <dd className={`text-sm text-text ${row.num ? 'num' : ''}`}>{row.value}</dd>
+      <div className="space-y-8">
+        {/* 1. Executive Identity Banner */}
+        <section className="flex flex-col justify-between gap-5 rounded-cards bg-surface p-6 shadow-subtle sm:flex-row sm:items-center">
+          <div className="flex items-start gap-4 sm:items-center sm:gap-5">
+            <div
+              className="flex h-16 w-16 shrink-0 items-center justify-center rounded-badges border border-border bg-accent text-lg font-semibold text-accent-ink ring-4 ring-bg"
+              aria-hidden="true"
+            >
+              {initials(name)}
+            </div>
+            <div className="min-w-0">
+              <h2 className="truncate text-xl font-semibold tracking-tight text-text">{name}</h2>
+              <p className="mt-0.5 truncate text-sm text-text-muted">{user?.email || '–'}</p>
+              <div className="mt-2.5 flex flex-wrap items-center gap-2">
+                <span className="num inline-flex items-center rounded-[6px] border border-border bg-bg px-2.5 py-0.5 text-xs font-medium text-text-muted">
+                  ID Pengguna #{user?.user_id ?? '–'}
+                </span>
+                {user?.created_at && (
+                  <span className="num inline-flex items-center rounded-[6px] border border-border bg-bg px-2.5 py-0.5 text-xs font-medium text-text-muted">
+                    Bergabung {date(user.created_at)}
+                  </span>
+                )}
               </div>
-            ))}
-          </dl>
-        </Card>
-
-        <ProfileForm key={`${user?.name}-${user?.email}`} user={user} onSave={onSave} />
-        <PasswordForm user={user} onSave={onSave} />
-
-        <div className="flex items-center justify-between rounded-xl border border-border bg-surface px-4 py-3 sm:px-5">
-          <div>
-            <p className="text-sm font-medium text-text">Keluar dari akun</p>
-            <p className="text-xs text-text-muted">Akhiri sesi aktif pada perangkat ini.</p>
+            </div>
           </div>
-          <Button variant="secondary" size="sm" icon={LogOut} onClick={onLogout} disabled={loggingOut}>
-            {loggingOut ? 'Memproses…' : 'Keluar'}
-          </Button>
-        </div>
 
-        <div className="flex items-center justify-between rounded-xl border border-down/40 bg-surface px-4 py-3 sm:px-5">
-          <div>
-            <p className="text-sm font-medium text-text">Hapus akun</p>
-            <p className="text-xs text-text-muted">Menonaktifkan akun ini secara permanen.</p>
+          <div className="flex shrink-0 items-center">
+            <Button variant="secondary" icon={LogOut} onClick={onLogout} disabled={loggingOut}>
+              {loggingOut ? 'Memproses…' : 'Keluar'}
+            </Button>
           </div>
-          <Button variant="danger" size="sm" icon={Trash2} onClick={() => setConfirmDelete(true)}>
-            Hapus akun
-          </Button>
+        </section>
+
+        {/* 2. Two-Column Editorial Settings Sections */}
+        <div className="space-y-8 divide-y divide-border">
+          {/* Section 1: Ubah Profil */}
+          <section className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+            <div className="lg:col-span-4">
+              <h2 className="text-base font-medium text-text">Ubah profil</h2>
+              <p className="mt-1 text-sm text-text-muted">
+                Perbarui nama dan alamat email yang terhubung dengan akun ZainSaham Anda.
+              </p>
+            </div>
+            <div className="lg:col-span-8">
+              <ProfileForm key={`${user?.name}-${user?.email}`} user={user} onSave={onSave} />
+            </div>
+          </section>
+
+          {/* Section 2: Ubah Kata Sandi */}
+          <section className="grid grid-cols-1 gap-6 pt-8 lg:grid-cols-12">
+            <div className="lg:col-span-4">
+              <h2 className="text-base font-medium text-text">Ubah kata sandi</h2>
+              <p className="mt-1 text-sm text-text-muted">
+                Gunakan minimal 8 karakter kombinasi huruf dan angka untuk menjaga keamanan akun.
+              </p>
+            </div>
+            <div className="lg:col-span-8">
+              <PasswordForm user={user} onSave={onSave} />
+            </div>
+          </section>
+
+          {/* Section 3: Zona Berbahaya */}
+          <section className="grid grid-cols-1 gap-6 pt-8 lg:grid-cols-12">
+            <div className="lg:col-span-4">
+              <h2 className="text-base font-medium text-text">Zona berbahaya</h2>
+              <p className="mt-1 text-sm text-text-muted">
+                Tindakan permanen yang akan menghapus seluruh data akun, daftar pantau, dan riwayat analisis Anda.
+              </p>
+            </div>
+            <div className="lg:col-span-8">
+              <div className="flex flex-col justify-between gap-4 rounded-cards border border-down/30 bg-down/[0.03] p-5 sm:flex-row sm:items-center sm:p-6">
+                <div>
+                  <h3 className="text-sm font-semibold text-text">Hapus akun</h3>
+                  <p className="mt-1 text-xs leading-relaxed text-text-muted">
+                    Menonaktifkan akun ini secara permanen. Tindakan ini tidak dapat dibatalkan.
+                  </p>
+                </div>
+                <div className="shrink-0">
+                  <Button variant="danger" icon={Trash2} onClick={() => setConfirmDelete(true)}>
+                    Hapus akun
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </section>
         </div>
       </div>
-    </>
+    </div>
   );
 }

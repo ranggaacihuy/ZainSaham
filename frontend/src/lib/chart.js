@@ -35,11 +35,9 @@ export function priceFormat(precision) {
 
 export const volumeFormat = { type: 'custom', minMove: 1, formatter: compact };
 
-export function createThemedChart(container, colors) {
+export function chartThemeOptions(colors) {
   const crosshairLine = { color: colors.muted, style: LineStyle.Dashed, labelBackgroundColor: colors.border };
-
-  return createChart(container, {
-    autoSize: true,
+  return {
     layout: {
       background: { type: ColorType.Solid, color: colors.surface },
       textColor: colors.muted,
@@ -53,22 +51,30 @@ export function createThemedChart(container, colors) {
       horzLines: { color: colors.border },
     },
     crosshair: { mode: CrosshairMode.Normal, vertLine: crosshairLine, horzLine: crosshairLine },
+  };
+}
+
+export function createThemedChart(container, colors) {
+  return createChart(container, {
+    autoSize: true,
+    ...chartThemeOptions(colors),
     rightPriceScale: { borderVisible: false, minimumWidth: 64 },
-    timeScale: { borderVisible: false, rightOffset: 4, minBarSpacing: 0.5, maxBarSpacing: 40, fixLeftEdge: true },
+    timeScale: {
+      borderVisible: false,
+      rightOffset: 0,
+      minBarSpacing: 0.5,
+      maxBarSpacing: 40,
+      fixLeftEdge: true,
+      fixRightEdge: true,
+      lockVisibleTimeRangeOnResize: true,
+    },
     handleScroll: { vertTouchDrag: false },
     localization: { locale: 'id-ID', timeFormatter: (time) => date(timeKey(time)) },
   });
 }
 
-const VISIBLE_BARS = 120;
-
-export function showLatest(chart, count) {
-  const timeScale = chart.timeScale();
-  if (count <= VISIBLE_BARS) {
-    timeScale.fitContent();
-    return;
-  }
-  timeScale.setVisibleLogicalRange({ from: count - VISIBLE_BARS, to: count - 0.5 + timeScale.options().rightOffset });
+export function showLatest(chart) {
+  chart.timeScale().fitContent();
 }
 
 export function continuesSeries(previous, next, dateField) {

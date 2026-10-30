@@ -2,7 +2,7 @@ import { RefreshCw } from 'lucide-react';
 import { Button } from './Button';
 
 export function Skeleton({ className = '', style }) {
-  return <div aria-hidden="true" className={`animate-pulse rounded-md bg-surface-2 ${className}`} style={style} />;
+  return <div aria-hidden="true" className={`animate-pulse rounded-lg bg-surface-2 ${className}`} style={style} />;
 }
 
 export function SkeletonText({ lines = 3, className = '' }) {
@@ -52,11 +52,11 @@ export function ErrorState({ error, message, onRetry, className = '', compact = 
 
 export function PageHeader({ title, description, actions, children }) {
   return (
-    <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+    <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
       <div className="min-w-0">
         {children}
-        <h1 className="text-xl font-semibold text-text">{title}</h1>
-        {description && <p className="mt-1 truncate text-sm text-text-muted">{description}</p>}
+        <h1 className="text-subheading font-normal text-text sm:text-heading">{title}</h1>
+        {description && <p className="mt-2 truncate text-sm text-text-muted">{description}</p>}
       </div>
       {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
     </div>

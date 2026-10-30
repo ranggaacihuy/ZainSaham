@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { chartColors, createThemedChart } from '../lib/chart';
+import { chartColors, chartThemeOptions, createThemedChart } from '../lib/chart';
 
 export default function useChart(setup) {
   const containerRef = useRef(null);
@@ -14,9 +14,21 @@ export default function useChart(setup) {
       setHoverIndex(param.time === undefined || param.logical === undefined ? null : Math.round(param.logical));
     });
 
-    apiRef.current = { chart, colors, ...setup(chart, colors) };
+    const instance = setup(chart, colors);
+    apiRef.current = { chart, colors, ...instance };
+
+    const onThemeChange = () => {
+      if (!apiRef.current) return;
+      const nextColors = chartColors();
+      apiRef.current.colors = nextColors;
+      chart.applyOptions(chartThemeOptions(nextColors));
+      apiRef.current.applyTheme?.(nextColors);
+    };
+
+    window.addEventListener('zainsaham:theme-change', onThemeChange);
 
     return () => {
+      window.removeEventListener('zainsaham:theme-change', onThemeChange);
       apiRef.current = null;
       chart.remove();
     };

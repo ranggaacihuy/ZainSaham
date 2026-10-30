@@ -8,7 +8,7 @@ function renderInline(text, keyPrefix) {
     const key = `${keyPrefix}-${i}`;
     if ((part.startsWith('**') && part.endsWith('**')) || (part.startsWith('__') && part.endsWith('__'))) {
       return (
-        <strong key={key} className="font-semibold text-text">
+        <strong key={key} className="font-medium text-text">
           {part.slice(2, -2)}
         </strong>
       );
@@ -97,7 +97,7 @@ export default function MarkdownText({ text, className = '' }) {
         const key = `b-${i}`;
         if (block.type === 'h') {
           return (
-            <h3 key={key} className={`${block.level <= 2 ? 'text-base' : 'text-sm'} pt-1 font-semibold text-text`}>
+            <h3 key={key} className={`${block.level <= 2 ? 'text-base' : 'text-sm'} pt-1 font-medium text-text`}>
               {renderInline(block.text, key)}
             </h3>
           );

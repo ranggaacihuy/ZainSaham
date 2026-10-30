@@ -20,6 +20,7 @@ import {
   Change,
 } from '../components/ui';
 import WatchlistButton from '../components/WatchlistButton';
+import StockLogo from '../components/StockLogo';
 import useAsync from '../hooks/useAsync';
 import useDebounce from '../hooks/useDebounce';
 import { searchStocks } from '../api/stocks';
@@ -74,14 +75,14 @@ export default function StockListPage() {
   const hasFilter = Boolean(q || sector);
 
   return (
-    <>
+    <div className="w-full">
       <PageHeader
         title="Daftar Saham"
         description={data && !hasFilter ? `${number(data.total, 0)} saham terdaftar` : 'Saham BEI beserta harga terakhir'}
       />
 
       <Card padded={false}>
-        <div className="flex flex-col gap-3 border-b border-border p-4 sm:flex-row sm:items-center">
+        <div className="flex flex-col gap-3 border-b border-border bg-surface px-5 py-3.5 sm:flex-row sm:items-center sm:px-6">
           <Input
             icon={Search}
             type="search"
@@ -89,13 +90,15 @@ export default function StockListPage() {
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Cari kode atau nama perusahaan"
             aria-label="Cari saham"
-            wrapperClassName="sm:max-w-xs sm:flex-1"
+            wrapperClassName="sm:max-w-sm sm:flex-1"
+            className="h-9 text-sm"
           />
           <Select
             value={sector}
             onChange={(e) => updateParams({ sector: e.target.value, page: 1 })}
             aria-label="Filter sektor"
             wrapperClassName="sm:w-56"
+            className="h-9 text-sm"
             disabled={sectors.length === 0}
           >
             <option value="">Semua sektor</option>
@@ -105,13 +108,17 @@ export default function StockListPage() {
               </option>
             ))}
           </Select>
-          {data && <p className="num text-xs text-text-muted sm:ml-auto">{number(data.total, 0)} hasil</p>}
+          {data && (
+            <span className="num inline-flex h-7 items-center rounded-md border border-border bg-bg px-2.5 text-xs text-text-muted sm:ml-auto">
+              {number(data.total, 0)} hasil
+            </span>
+          )}
         </div>
 
         {result.loading && (
-          <div className="space-y-px p-4">
+          <div className="space-y-1.5 p-5 sm:p-6">
             {Array.from({ length: 8 }, (_, i) => (
-              <Skeleton key={i} className="h-10" />
+              <Skeleton key={i} className="h-14" />
             ))}
           </div>
         )}
@@ -134,15 +141,19 @@ export default function StockListPage() {
         {items.length > 0 && (
           <>
             <TableWrap>
-              <Table>
+              <Table className="table-fixed">
                 <THead>
                   <tr>
-                    <Th>Kode</Th>
-                    <Th>Nama perusahaan</Th>
-                    <Th className="hidden lg:table-cell">Sektor</Th>
-                    <Th align="right">Harga</Th>
-                    <Th align="right">Perubahan</Th>
-                    <Th align="right">
+                    <Th className="w-40 px-5 sm:px-6">Kode</Th>
+                    <Th className="px-5 sm:px-6">Nama perusahaan</Th>
+                    <Th className="hidden w-56 px-5 lg:table-cell sm:px-6">Sektor</Th>
+                    <Th align="right" className="w-40 px-5 sm:px-6">
+                      Harga
+                    </Th>
+                    <Th align="right" className="w-36 px-5 sm:px-6">
+                      Perubahan
+                    </Th>
+                    <Th align="right" className="w-16 px-4 sm:px-5">
                       <span className="sr-only">Watchlist</span>
                     </Th>
                   </tr>
@@ -150,16 +161,29 @@ export default function StockListPage() {
                 <TBody>
                   {items.map((stock) => (
                     <Tr key={stock.stock_id} onClick={() => navigate(`/stocks/${stock.ticker}`)}>
-                      <Td className="font-semibold text-text">{stock.ticker}</Td>
-                      <Td className="max-w-40 truncate text-text-muted sm:max-w-xs">{stock.company_name}</Td>
-                      <Td className="hidden text-text-muted lg:table-cell">{stock.sector || '–'}</Td>
-                      <Td num className="text-text">
+                      <Td className="h-16 px-5 sm:px-6">
+                        <div className="flex items-center gap-3">
+                          <StockLogo ticker={stock.ticker} size="md" />
+                          <span className="num text-sm font-medium text-text sm:text-base">{stock.ticker}</span>
+                        </div>
+                      </Td>
+                      <Td className="h-16 truncate px-5 text-sm text-text sm:px-6">{stock.company_name}</Td>
+                      <Td className="hidden h-16 px-5 lg:table-cell sm:px-6">
+                        {stock.sector ? (
+                          <span className="inline-flex h-6 items-center rounded-md border border-border bg-bg px-2 text-xs text-text-muted">
+                            {stock.sector}
+                          </span>
+                        ) : (
+                          <span className="text-text-muted">–</span>
+                        )}
+                      </Td>
+                      <Td num className="h-16 px-5 text-sm font-medium text-text sm:px-6 sm:text-base">
                         {idr(stock.summary?.close)}
                       </Td>
-                      <Td num>
-                        <Change pctValue={stock.summary?.change_pct} />
+                      <Td num className="h-16 px-5 sm:px-6">
+                        <Change pctValue={stock.summary?.change_pct} pill />
                       </Td>
-                      <Td align="right" className="w-12 pr-2">
+                      <Td align="right" className="h-16 px-4 sm:px-5">
                         <WatchlistButton stock={stock} compact />
                       </Td>
                     </Tr>
@@ -169,7 +193,7 @@ export default function StockListPage() {
             </TableWrap>
 
             {data.lastPage > 1 && (
-              <nav aria-label="Paginasi" className="flex items-center justify-between gap-3 px-4 py-3">
+              <nav aria-label="Paginasi" className="flex items-center justify-between gap-3 px-5 py-3.5 sm:px-6">
                 <p className="num text-xs text-text-muted">
                   Halaman {data.page} dari {data.lastPage}
                 </p>
@@ -191,6 +215,6 @@ export default function StockListPage() {
           </>
         )}
       </Card>
-    </>
+    </div>
   );
 }

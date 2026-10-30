@@ -44,7 +44,7 @@ export default function FundamentalChart({ fundamentals = [], periodType, onType
 
   return (
     <div className="space-y-4">
-      <div className="rounded-xl border border-border bg-surface">
+      <div className="rounded-cards bg-surface shadow-subtle">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3">
           <div className="flex items-center gap-4 text-xs text-text-muted">
             <span className="flex items-center gap-1.5">
@@ -123,7 +123,7 @@ export default function FundamentalChart({ fundamentals = [], periodType, onType
         </div></div>
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-border bg-surface">
+      <div className="overflow-hidden rounded-cards bg-surface shadow-subtle">
         <TableWrap>
           <Table>
             <THead>

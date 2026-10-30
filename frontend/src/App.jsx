@@ -1,5 +1,6 @@
 import { Suspense, lazy } from 'react';
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom';
+import { ThemeProvider } from './context/ThemeContext';
 import { ToastProvider } from './context/ToastContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { WatchlistProvider } from './context/WatchlistContext';
@@ -51,50 +52,52 @@ function GuestOnly({ children }) {
 
 export default function App() {
   return (
-    <ToastProvider>
-      <AuthProvider>
-        <WatchlistProvider>
-          <BrowserRouter>
-            <Routes>
-              <Route
-                path="/login"
-                element={
-                  <GuestOnly>
-                    <LoginPage />
-                  </GuestOnly>
-                }
-              />
-              <Route
-                path="/register"
-                element={
-                  <GuestOnly>
-                    <RegisterPage />
-                  </GuestOnly>
-                }
-              />
+    <ThemeProvider>
+      <ToastProvider>
+        <AuthProvider>
+          <WatchlistProvider>
+            <BrowserRouter>
+              <Routes>
+                <Route
+                  path="/login"
+                  element={
+                    <GuestOnly>
+                      <LoginPage />
+                    </GuestOnly>
+                  }
+                />
+                <Route
+                  path="/register"
+                  element={
+                    <GuestOnly>
+                      <RegisterPage />
+                    </GuestOnly>
+                  }
+                />
 
-              <Route
-                element={
-                  <RequireAuth>
-                    <AppLayout />
-                  </RequireAuth>
-                }
-              >
-                <Route path="/" element={<Navigate to="/dashboard" replace />} />
-                <Route path="/dashboard" element={<DashboardPage />} />
-                <Route path="/stocks" element={<StockListPage />} />
-                <Route path="/stocks/:ticker" element={stockDetail} />
-                <Route path="/saham/:ticker" element={stockDetail} />
-                <Route path="/watchlist" element={<WatchlistPage />} />
-                <Route path="/ai-analysis" element={<AiAnalysisPage />} />
-                <Route path="/analysis-history" element={<AnalysisHistoryPage />} />
-                <Route path="/profile" element={<ProfilePage />} />
-                <Route path="*" element={<NotFound />} />
-              </Route>
-            </Routes>
-          </BrowserRouter>
-        </WatchlistProvider>
-      </AuthProvider>
-    </ToastProvider>
+                <Route
+                  element={
+                    <RequireAuth>
+                      <AppLayout />
+                    </RequireAuth>
+                  }
+                >
+                  <Route path="/" element={<Navigate to="/dashboard" replace />} />
+                  <Route path="/dashboard" element={<DashboardPage />} />
+                  <Route path="/stocks" element={<StockListPage />} />
+                  <Route path="/stocks/:ticker" element={stockDetail} />
+                  <Route path="/saham/:ticker" element={stockDetail} />
+                  <Route path="/watchlist" element={<WatchlistPage />} />
+                  <Route path="/ai-analysis" element={<AiAnalysisPage />} />
+                  <Route path="/analysis-history" element={<AnalysisHistoryPage />} />
+                  <Route path="/profile" element={<ProfilePage />} />
+                  <Route path="*" element={<NotFound />} />
+                </Route>
+              </Routes>
+            </BrowserRouter>
+          </WatchlistProvider>
+        </AuthProvider>
+      </ToastProvider>
+    </ThemeProvider>
   );
 }

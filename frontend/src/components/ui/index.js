@@ -7,4 +7,4 @@ export { Tabs } from './Tabs';
 export { Skeleton, SkeletonText, EmptyState, ErrorState, PageHeader } from './States';
 export { Modal } from './Modal';
 export { Change } from './Change';
-
+export { Logo } from './Logo';

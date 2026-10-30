@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { RefreshCw, Send } from 'lucide-react';
 import { Button, Textarea } from './ui';
 import MarkdownText from './MarkdownText';
+import StockLogo from './StockLogo';
 import { chat, chatMessages } from '../api/ai';
 import { fieldError } from '../api/client';
 import { dateTime } from '../lib/format';
@@ -113,17 +114,23 @@ export default function ChatPanel({ stock, userId, initialSessionId, onSessionCh
   };
 
   return (
-    <div className="flex h-[min(640px,calc(100vh-220px))] min-h-105 flex-col rounded-xl border border-border bg-surface">
-      <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
-        <div className="min-w-0">
-          <h2 className="text-base font-semibold text-text">Tanya AI · {stock.ticker}</h2>
-          <p className="truncate text-xs text-text-muted">
-            {sessionId ? `Sesi #${sessionId}` : 'Percakapan baru'}
-          </p>
+    <div className="flex h-[min(640px,calc(100vh-200px))] min-h-[540px] flex-col rounded-cards bg-surface shadow-subtle">
+      <div className="flex items-center justify-between gap-3 border-b border-border px-5 py-4">
+        <div className="flex min-w-0 items-center gap-3">
+          <StockLogo ticker={stock.ticker} size="md" />
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <h2 className="text-base font-medium text-text">Tanya AI · {stock.ticker}</h2>
+              <span className="num inline-flex h-5 items-center rounded border border-border bg-bg px-1.5 text-[11px] text-text-muted">
+                {sessionId ? `Sesi #${sessionId}` : 'Baru'}
+              </span>
+            </div>
+            <p className="mt-0.5 truncate text-xs text-text-muted">{stock.company_name}</p>
+          </div>
         </div>
       </div>
 
-      <div ref={listRef} className="flex-1 space-y-4 overflow-y-auto px-4 py-4" aria-live="polite">
+      <div ref={listRef} className="flex-1 space-y-4 overflow-y-auto px-5 py-4" aria-live="polite">
         {history.loading && <p className="text-sm text-text-muted">Memuat riwayat percakapan…</p>}
         {history.error && (
           <div role="alert" className="flex flex-wrap items-center gap-3 text-sm">
@@ -145,7 +152,7 @@ export default function ChatPanel({ stock, userId, initialSessionId, onSessionCh
           m.role === 'user' ? (
             <div key={m.key} className="flex flex-col items-end">
               <div
-                className={`max-w-[85%] whitespace-pre-wrap wrap-break-word rounded-xl bg-surface-2 px-3 py-2 text-sm text-text ${
+                className={`max-w-[85%] whitespace-pre-wrap wrap-break-word rounded-lg border border-border bg-surface-2 px-3.5 py-2.5 text-sm text-text ${
                   m.status === 'sending' ? 'opacity-70' : ''
                 }`}
               >
@@ -161,17 +168,22 @@ export default function ChatPanel({ stock, userId, initialSessionId, onSessionCh
               )}
             </div>
           ) : (
-            <div key={m.key} className="max-w-[92%]">
+            <div key={m.key} className="max-w-[92%] rounded-lg border border-border bg-bg/60 p-4">
               <MarkdownText text={m.content} />
-              {m.created_at && <p className="mt-1 text-xs text-text-muted">{dateTime(m.created_at)}</p>}
+              {m.created_at && <p className="num mt-2 text-xs text-text-muted">{dateTime(m.created_at)}</p>}
             </div>
           ),
         )}
 
-        {sending && <p className="text-sm text-text-muted">AI sedang menyusun jawaban…</p>}
+        {sending && (
+          <p className="flex items-center gap-2 text-sm text-text-muted">
+            <span className="h-2 w-2 animate-pulse rounded-full bg-iris" aria-hidden="true" />
+            AI sedang menyusun jawaban…
+          </p>
+        )}
       </div>
 
-      <form onSubmit={onSubmit} className="border-t border-border p-3">
+      <form onSubmit={onSubmit} className="border-t border-border p-3.5">
         <label htmlFor="chat-input" className="sr-only">
           Pesan untuk AI
         </label>

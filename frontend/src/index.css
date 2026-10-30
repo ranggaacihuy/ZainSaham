@@ -1,22 +1,65 @@
 @import "tailwindcss";
 @import "@fontsource-variable/inter";
 
+/*
+ * High-Contrast Institutional Fintech Design System (Light & Dark Mode)
+ * Reference tokens from theme.css
+ */
+
 @theme {
-  --color-bg: #0A0F18;
-  --color-surface: #0F1623;
-  --color-surface-2: #141C2B;
-  --color-border: #1F2A3C;
-  --color-text: #E6EBF2;
-  --color-text-muted: #8A97AB;
-  --color-accent: #CCFF00;
-  --color-accent-hover: #B8E600;
-  --color-accent-ink: #0A0F18;
-  --color-up: #34D399;
-  --color-down: #F87171;
-  --color-warn: #FBBF24;
+  /* ---- Raw palette tokens (from theme.css) ---- */
+  --color-iris-gleam: #847dff;
+  --color-cyan-signal: #00b3dd;
+  --color-pale-iris: #d1c9ff;
+  --color-deep-iris: #4b49aa;
+  --color-orchid-bloom: #dd90d8;
+  --color-periwinkle: #90b8f0;
+  --color-obsidian: #0f1011;
+  --color-abyss: #090a0b;
+  --color-graphite: #2e2e2e;
+  --color-steel: #3f4041;
+  --color-silver: #cacaca;
+  --color-fog: #6a6b6b;
+  --color-ash: #9f9fa0;
+  --color-cloud: #f5f5f7;
+  --color-pure: #ffffff;
+  --color-void: #000000;
 
-  --font-sans: "Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  /* ---- Semantic theme tokens (default: Light Mode) ---- */
+  --color-bg: #f5f5f7;            /* --color-cloud */
+  --color-surface: #ffffff;       /* --color-pure */
+  --color-surface-2: #f0f0f2;     /* Secondary surface / Hover states */
+  --color-surface-3: #e5e5e7;     /* Pressed / tertiary neutral */
+  --color-border: #e5e5e7;        /* Dividers & borders */
+  --color-border-strong: #cacaca; /* --color-silver */
+  --color-input: #ffffff;         /* --color-pure */
+  --color-text: #0f1011;          /* --color-obsidian */
+  --color-text-muted: #6a6b6b;    /* --color-fog */
+  --color-text-subtle: #6a6b6b;   /* --color-fog */
 
+  /* Primary Buttons & Active Navbar Item: Obsidian bg with Pure text in Light Mode */
+  --color-accent: #0f1011;
+  --color-accent-hover: #2e2e2e;
+  --color-accent-ink: #ffffff;
+
+  /* Micro-accent (Iris) — strictly for AI badges/active selection & focus rings */
+  --color-iris: #4b49aa;          /* --color-deep-iris in Light Mode */
+
+  /* Financial semantics (Light Mode) */
+  --color-up: #16a34a;
+  --color-down: #dc2626;
+  --color-warn: #d97706;
+
+  /* ---- Typography (from theme.css) ---- */
+  --font-sans: "Suisse Int'l", "Suisseintltrial", "Inter Variable", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-suisseintltrial: "Suisseintltrial", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-lyon-display: "Lyon Display", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-suisse-intl: "Suisse Int'l", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-suisse-intl-trial: "Suisse Int'l Trial", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-roboto-mono: "Roboto Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --font-suisseintl: "Suisseintl", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+
+  /* Standard Tailwind scale */
   --text-xs: 0.75rem;
   --text-xs--line-height: 1rem;
   --text-sm: 0.875rem;
@@ -25,8 +68,80 @@
   --text-base--line-height: 1.5rem;
   --text-xl: 1.25rem;
   --text-xl--line-height: 1.75rem;
-  --text-display: 1.75rem;
-  --text-display--line-height: 2.25rem;
+
+  /* Theme scale */
+  --text-micro: 12px;
+  --text-micro--line-height: 1.35;
+  --text-mono-label: 12px;
+  --text-mono-label--line-height: 2;
+  --text-caption: 13px;
+  --text-caption--line-height: 1.45;
+  --text-body-sm: 14px;
+  --text-body-sm--line-height: 1.67;
+  --text-body: 16px;
+  --text-body--line-height: 1.5;
+  --text-body-lg: 18px;
+  --text-body-lg--line-height: 1.5;
+  --text-subheading: 22px;
+  --text-subheading--line-height: 1.35;
+  --text-subheading--letter-spacing: -0.015em;
+  --text-heading: 28px;
+  --text-heading--line-height: 1.2;
+  --text-heading--letter-spacing: -0.02em;
+  --text-heading-lg: 38px;
+  --text-heading-lg--line-height: 1.05;
+  --text-heading-lg--letter-spacing: -0.03em;
+  --text-display-sm: 56px;
+  --text-display-sm--line-height: 1;
+  --text-display-sm--letter-spacing: -0.035em;
+  --text-display: 64px;
+  --text-display--line-height: 0.95;
+  --text-display--letter-spacing: -0.04em;
+
+  /* ---- Border Radius Discipline (8px/10px controls, 12px cards, 9999px badges/nav pill) ---- */
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-2xl: 16px;
+  --radius-3xl: 24px;
+  --radius-inputs: 8px;
+  --radius-buttons: 8px;
+  --radius-large-buttons: 10px;
+  --radius-cards: 12px;
+  --radius-images: 24px;
+  --radius-badges: 9999px;
+
+  /* ---- Elevation: crisp 1px border (no neon/glow shadows) ---- */
+  --shadow-subtle: 0 0 0 1px var(--color-border);
+  --shadow-lg: rgba(0, 0, 0, 0.2) 0px 18px 20px 0px;
+  --shadow-dropdown: 0 10px 25px rgba(0, 0, 0, 0.08);
+}
+
+/* ---- Dark Mode Token Overrides ---- */
+html.dark {
+  --shadow-dropdown: 0 12px 32px rgba(0, 0, 0, 0.45);
+  --color-bg: #090a0b;            /* --color-abyss */
+  --color-surface: #0f1011;       /* --color-obsidian */
+  --color-surface-2: #2e2e2e;     /* --color-graphite (Secondary surface / Hover) */
+  --color-surface-3: #3f4041;     /* --color-steel */
+  --color-border: #2e2e2e;        /* --color-graphite (Borders & Dividers) */
+  --color-border-strong: #3f4041; /* --color-steel */
+  --color-input: #0f1011;         /* --color-obsidian */
+  --color-text: #f5f5f7;          /* --color-cloud */
+  --color-text-muted: #9f9fa0;    /* --color-ash */
+  --color-text-subtle: #9f9fa0;   /* --color-ash */
+
+  /* Primary Buttons & Active Navbar Item: Pure bg with Obsidian text in Dark Mode */
+  --color-accent: #ffffff;        /* --color-pure */
+  --color-accent-hover: #cacaca;  /* --color-silver */
+  --color-accent-ink: #0f1011;    /* --color-obsidian */
+
+  /* Micro-accent (Iris Gleam) in Dark Mode */
+  --color-iris: #847dff;          /* --color-iris-gleam */
+
+  /* Financial semantics (Dark Mode) */
+  --color-up: #22c55e;
+  --color-down: #ef4444;
+  --color-warn: #f59e0b;
 }
 
 @layer base {
@@ -37,6 +152,10 @@
   }
 
   html {
+    color-scheme: light;
+  }
+
+  html.dark {
     color-scheme: dark;
   }
 
@@ -45,9 +164,25 @@
     color: var(--color-text);
     font-family: var(--font-sans);
     font-size: var(--text-sm);
-    line-height: var(--text-sm--line-height);
+    line-height: 1.5;
+    font-weight: 400;
     min-height: 100vh;
     -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-weight: 500;
+  }
+
+  ::selection {
+    background-color: var(--color-accent);
+    color: var(--color-accent-ink);
   }
 
   button,
@@ -60,21 +195,49 @@
     display: none;
   }
 
+  input::placeholder,
+  textarea::placeholder {
+    color: var(--color-text-muted);
+    opacity: 0.7;
+  }
+
   :focus-visible {
-    outline: 2px solid var(--color-accent);
+    outline: 2px solid var(--color-iris);
     outline-offset: 2px;
   }
 }
 
 @layer utilities {
   .num {
+    font-family: var(--font-roboto-mono);
     font-variant-numeric: tabular-nums;
+    letter-spacing: -0.02em;
+  }
+
+  .bg-dot-grid {
+    background-image: radial-gradient(var(--color-border-strong) 1px, transparent 1px);
+    background-size: 18px 18px;
+  }
+
+  .animate-dropdown-in {
+    animation: dropdown-in 150ms ease-out forwards;
+  }
+}
+
+@keyframes dropdown-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
 
 * {
   scrollbar-width: thin;
-  scrollbar-color: var(--color-border) transparent;
+  scrollbar-color: var(--color-border-strong) transparent;
 }
 
 @media (prefers-reduced-motion: reduce) {

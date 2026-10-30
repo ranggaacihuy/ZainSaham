@@ -1,6 +1,6 @@
-import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { Search, Trash2 } from 'lucide-react';
+import { useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Trash2 } from 'lucide-react';
 import {
   Button,
   Card,
@@ -18,18 +18,34 @@ import {
   Tr,
 } from '../components/ui';
 import ConfirmModal from '../components/ConfirmModal';
+import SearchModal from '../components/SearchModal';
+import StockLogo from '../components/StockLogo';
 import { useWatchlist } from '../context/WatchlistContext';
 import { date, idr, number } from '../lib/format';
 
-function rsiTone(rsi) {
-  if (rsi === null || rsi === undefined) return 'text-text-muted';
-  if (rsi >= 70 || rsi <= 30) return 'text-warn';
-  return 'text-text';
+function RsiCell({ rsi }) {
+  if (rsi === null || rsi === undefined) {
+    return <span className="text-text-muted">–</span>;
+  }
+  const pct = Math.max(0, Math.min(100, Number(rsi)));
+  const isWarn = pct >= 70 || pct <= 30;
+  const barColor = pct >= 70 ? 'bg-down' : pct <= 30 ? 'bg-up' : 'bg-text-muted';
+  const textColor = isWarn ? 'text-warn' : 'text-text';
+
+  return (
+    <div className="inline-flex items-center justify-end gap-2.5">
+      <span className={`num text-sm font-medium ${textColor}`}>{number(rsi)}</span>
+      <span className="hidden h-1.5 w-10 overflow-hidden rounded-full bg-surface-2 sm:inline-block" aria-hidden="true">
+        <span className={`block h-full rounded-full ${barColor}`} style={{ width: `${pct}%` }} />
+      </span>
+    </div>
+  );
 }
 
 export default function WatchlistPage() {
   const navigate = useNavigate();
   const watchlist = useWatchlist();
+  const searchRef = useRef(null);
   const [toRemove, setToRemove] = useState(null);
   const [removing, setRemoving] = useState(false);
 
@@ -44,17 +60,13 @@ export default function WatchlistPage() {
   const showSkeleton = watchlist.loading && watchlist.items.length === 0;
 
   return (
-    <>
+    <div className="w-full">
       <PageHeader
         title="Watchlist"
         description={
           watchlist.items.length > 0 ? `${watchlist.items.length} saham dipantau` : 'Saham yang Anda pantau'
         }
-        actions={
-          <Button as={Link} to="/stocks" icon={Search}>
-            Cari saham
-          </Button>
-        }
+        actions={<SearchModal ref={searchRef} showShortcut={false} align="right" />}
       />
 
       <ConfirmModal
@@ -70,9 +82,9 @@ export default function WatchlistPage() {
 
       <Card padded={false}>
         {showSkeleton && (
-          <div className="space-y-px p-4">
+          <div className="space-y-1.5 p-5 sm:p-6">
             {Array.from({ length: 5 }, (_, i) => (
-              <Skeleton key={i} className="h-10" />
+              <Skeleton key={i} className="h-14" />
             ))}
           </div>
         )}
@@ -85,7 +97,7 @@ export default function WatchlistPage() {
           <EmptyState
             message="Watchlist masih kosong."
             action={
-              <Button as={Link} to="/stocks" size="sm" variant="primary">
+              <Button size="sm" variant="primary" onClick={() => searchRef.current?.focus()}>
                 Cari saham
               </Button>
             }
@@ -94,18 +106,24 @@ export default function WatchlistPage() {
 
         {watchlist.items.length > 0 && (
           <TableWrap>
-            <Table>
+            <Table className="table-fixed">
               <THead>
                 <tr>
-                  <Th>Kode</Th>
-                  <Th className="hidden sm:table-cell">Nama perusahaan</Th>
-                  <Th align="right">Harga</Th>
-                  <Th align="right">Perubahan</Th>
-                  <Th align="right">RSI 14</Th>
-                  <Th align="right" className="hidden md:table-cell">
+                  <Th className="w-40 px-5 sm:px-6">Kode</Th>
+                  <Th className="hidden px-5 sm:table-cell sm:px-6">Nama perusahaan</Th>
+                  <Th align="right" className="w-40 px-5 sm:px-6">
+                    Harga
+                  </Th>
+                  <Th align="right" className="w-36 px-5 sm:px-6">
+                    Perubahan
+                  </Th>
+                  <Th align="right" className="w-36 px-5 sm:px-6">
+                    RSI 14
+                  </Th>
+                  <Th align="right" className="hidden w-36 px-5 md:table-cell sm:px-6">
                     Ditambahkan
                   </Th>
-                  <Th align="right">
+                  <Th align="right" className="w-16 px-4 sm:px-5">
                     <span className="sr-only">Aksi</span>
                   </Th>
                 </tr>
@@ -116,23 +134,28 @@ export default function WatchlistPage() {
                   const summary = item.summary;
                   return (
                     <Tr key={item.watchlist_id} onClick={() => item.stock && navigate(`/stocks/${item.stock.ticker}`)}>
-                      <Td className="font-semibold text-text">{ticker}</Td>
-                      <Td className="hidden max-w-xs truncate text-text-muted sm:table-cell">
+                      <Td className="h-16 px-5 sm:px-6">
+                        <div className="flex items-center gap-3">
+                          <StockLogo ticker={ticker} size="md" />
+                          <span className="num text-sm font-medium text-text sm:text-base">{ticker}</span>
+                        </div>
+                      </Td>
+                      <Td className="hidden h-16 truncate px-5 text-sm text-text sm:table-cell sm:px-6">
                         {item.stock?.company_name || '–'}
                       </Td>
-                      <Td num className="text-text">
+                      <Td num className="h-16 px-5 text-sm font-medium text-text sm:px-6 sm:text-base">
                         {idr(summary?.close)}
                       </Td>
-                      <Td num>
-                        <Change pctValue={summary?.change_pct} />
+                      <Td num className="h-16 px-5 sm:px-6">
+                        <Change pctValue={summary?.change_pct} pill />
                       </Td>
-                      <Td num className={rsiTone(summary?.rsi_14)}>
-                        {number(summary?.rsi_14)}
+                      <Td num className="h-16 px-5 sm:px-6">
+                        <RsiCell rsi={summary?.rsi_14} />
                       </Td>
-                      <Td num className="hidden text-text-muted md:table-cell">
+                      <Td num className="hidden h-16 px-5 text-xs text-text-muted md:table-cell sm:px-6">
                         {date(item.created_at)}
                       </Td>
-                      <Td align="right" className="w-12 pr-2">
+                      <Td align="right" className="h-16 px-4 sm:px-5">
                         <button
                           type="button"
                           onClick={(e) => {
@@ -142,9 +165,9 @@ export default function WatchlistPage() {
                           disabled={watchlist.isPending(item.stock_id)}
                           aria-label={`Hapus ${ticker} dari watchlist`}
                           title="Hapus dari watchlist"
-                          className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-text-muted transition-colors duration-150 hover:bg-surface-2 hover:text-down disabled:opacity-50"
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-text-muted transition-colors duration-150 hover:bg-down/10 hover:text-down focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-iris disabled:opacity-50"
                         >
-                          <Trash2 className="h-4 w-4" />
+                          <Trash2 className="h-4 w-4" strokeWidth={1.75} />
                         </button>
                       </Td>
                     </Tr>
@@ -155,6 +178,6 @@ export default function WatchlistPage() {
           </TableWrap>
         )}
       </Card>
-    </>
+    </div>
   );
 }

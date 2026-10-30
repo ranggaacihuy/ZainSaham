@@ -33,7 +33,7 @@ export function Th({ children, align = 'left', className = '', ...props }) {
   return (
     <th
       scope="col"
-      className={`sticky top-0 z-[1] h-10 whitespace-nowrap border-b border-border bg-surface px-4 text-xs font-medium text-text-muted ${alignClass[align]} ${className}`}
+      className={`sticky top-0 z-[1] h-11 whitespace-nowrap border-b border-border bg-surface px-4 text-xs font-medium text-text-muted ${alignClass[align]} ${className}`}
       {...props}
     >
       {children}
@@ -44,7 +44,7 @@ export function Th({ children, align = 'left', className = '', ...props }) {
 export function Td({ children, align = 'left', num = false, className = '', ...props }) {
   return (
     <td
-      className={`h-11 whitespace-nowrap border-b border-border px-4 ${alignClass[num ? 'right' : align]} ${num ? 'num' : ''} ${className}`}
+      className={`h-12 whitespace-nowrap border-b border-border px-4 ${alignClass[num ? 'right' : align]} ${num ? 'num' : ''} ${className}`}
       {...props}
     >
       {children}

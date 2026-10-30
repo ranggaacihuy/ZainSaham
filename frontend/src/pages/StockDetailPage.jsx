@@ -3,6 +3,7 @@ import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { ChevronLeft, ExternalLink, MessageSquareText } from 'lucide-react';
 import { Badge, Button, Card, EmptyState, ErrorState, Skeleton, SkeletonText, Tabs } from '../components/ui';
 import StockChart from '../components/StockChart';
+import StockLogo from '../components/StockLogo';
 import TechnicalChart from '../components/TechnicalChart';
 import FundamentalChart from '../components/FundamentalChart';
 import NewsModal from '../components/NewsModal';
@@ -58,20 +59,25 @@ function PriceHeader({ stock, prices, live }) {
   return (
     <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
       <div className="min-w-0">
-        <div className="flex flex-wrap items-center gap-2">
-          <h1 className="text-xl font-bold text-text">{stock.ticker}</h1>
-          {stock.sector && <Badge>{stock.sector}</Badge>}
-          {stock.exchange && <span className="text-xs text-text-muted">{stock.exchange}</span>}
+        <div className="flex items-center gap-3.5">
+          <StockLogo ticker={stock.ticker} size="lg" />
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="num text-subheading font-medium text-text">{stock.ticker}</h1>
+              {stock.sector && <Badge>{stock.sector}</Badge>}
+              {stock.exchange && <span className="text-xs text-text-muted">{stock.exchange}</span>}
+            </div>
+            <p className="mt-0.5 truncate text-sm text-text-muted">{stock.company_name}</p>
+          </div>
         </div>
-        <p className="mt-0.5 truncate text-sm text-text-muted">{stock.company_name}</p>
 
         <div className="mt-3">
-          {prices.loading && <Skeleton className="h-9 w-56" />}
+          {prices.loading && <Skeleton className="h-11 w-56" />}
           {prices.error && <ErrorState compact error={prices.error} onRetry={prices.reload} />}
           {summary && (
             <>
               <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                <span className="num text-display font-semibold text-text">{formatPrice(summary.close)}</span>
+                <span className="num text-heading font-normal text-text sm:text-heading-lg">{formatPrice(summary.close)}</span>
                 <span className={`num text-sm font-medium ${toneText[tone]}`}>
                   {signed(summary.change_value, index ? 2 : 0)} ({pct(summary.change_pct)})
                 </span>
@@ -128,7 +134,7 @@ function PriceHeader({ stock, prices, live }) {
 }
 
 function ChartTab({ stock, prices, timeframe, onTimeframeChange }) {
-  if (prices.loading) return <Skeleton className="h-100 rounded-xl" />;
+  if (prices.loading) return <Skeleton className="h-100 rounded-cards" />;
   if (prices.error) return <Card><ErrorState error={prices.error} onRetry={prices.reload} /></Card>;
   if (!prices.data?.length) return <Card><EmptyState message="Data harga belum tersedia untuk saham ini." /></Card>;
   return (
@@ -155,10 +161,10 @@ function TechnicalTab({ stock, prices, timeframe, onTimeframeChange }) {
       <div className="space-y-4">
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
           {[0, 1, 2].map((i) => (
-            <Skeleton key={i} className="h-22 rounded-xl" />
+            <Skeleton key={i} className="h-22 rounded-cards" />
           ))}
         </div>
-        <Skeleton className="h-57.5 rounded-xl" />
+        <Skeleton className="h-57.5 rounded-cards" />
       </div>
     );
   }
@@ -183,7 +189,7 @@ function FundamentalTab({ stockId }) {
   const [periodType, setPeriodType] = useState('quarterly');
   const periods = useMemo(() => classifyPeriods(fundamentals.data || []), [fundamentals.data]);
 
-  if (fundamentals.loading) return <Skeleton className="h-105 rounded-xl" />;
+  if (fundamentals.loading) return <Skeleton className="h-105 rounded-cards" />;
   if (fundamentals.error) return <Card><ErrorState error={fundamentals.error} onRetry={fundamentals.reload} /></Card>;
   if (!fundamentals.data?.length) return <Card><EmptyState message="Data fundamental belum tersedia untuk saham ini." /></Card>;
 
@@ -257,7 +263,7 @@ export default function StockDetailPage() {
   const stock = stockState.data;
   const tabs = isIndex(stock) ? INDEX_TABS : TABS;
   const tab = tabs.some((t) => t.value === searchParams.get('tab')) ? searchParams.get('tab') : 'grafik';
-  const prices =useAsync((opts) => getPrices(stock.stock_id, opts), [stock?.stock_id], { enabled: Boolean(stock) });
+  const prices = useAsync((opts) => getPrices(stock.stock_id, opts), [stock?.stock_id], { enabled: Boolean(stock) });
   const { setData: setPrices } = prices;
   const live = useLiveQuote(prices.data ? stock?.stock_id : null, (price) => {
     const last = prices.data?.[prices.data.length - 1];
@@ -290,7 +296,7 @@ export default function StockDetailPage() {
       <>
         {backLink}
         <HeaderSkeleton />
-        <Skeleton className="h-100 rounded-xl" />
+        <Skeleton className="h-100 rounded-cards" />
       </>
     );
   }

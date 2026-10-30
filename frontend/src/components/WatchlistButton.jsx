@@ -25,11 +25,11 @@ export default function WatchlistButton({ stock, compact = false, className = ''
         aria-label={label}
         aria-pressed={inList}
         title={label}
-        className={`inline-flex h-8 w-8 items-center justify-center rounded-lg transition-colors duration-150 hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-50 ${
-          inList ? 'text-text' : 'text-text-muted hover:text-text'
+        className={`inline-flex h-8 w-8 items-center justify-center rounded-lg transition-colors duration-150 hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-iris disabled:opacity-50 ${
+          inList ? 'bg-surface-2 text-text' : 'text-text-muted hover:text-text'
         } ${className}`}
       >
-        {inList ? <BookmarkCheck className="h-4 w-4" /> : <Bookmark className="h-4 w-4" />}
+        {inList ? <BookmarkCheck className="h-4 w-4" strokeWidth={1.75} /> : <Bookmark className="h-4 w-4" strokeWidth={1.75} />}
       </button>
     );
   }

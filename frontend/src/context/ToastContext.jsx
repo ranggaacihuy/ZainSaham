@@ -42,7 +42,7 @@ export function ToastProvider({ children }) {
           <div
             key={toast.id}
             role={toast.type === 'error' ? 'alert' : 'status'}
-            className="pointer-events-auto flex items-stretch overflow-hidden rounded-lg border border-border bg-surface-2"
+            className="pointer-events-auto flex items-stretch overflow-hidden rounded-cards bg-surface shadow-subtle"
           >
             <span className={`w-0.5 shrink-0 ${toneBar[toast.type] || toneBar.info}`} aria-hidden="true" />
             <p className="flex-1 px-3 py-2.5 text-sm text-text">{toast.message}</p>
