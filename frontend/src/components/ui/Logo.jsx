@@ -1,10 +1,20 @@
-import { Asterisk } from 'lucide-react';
+import { useTheme } from '../../context/ThemeContext';
+import logoDark from '../../assets/logo-dark.png';
+import logoLight from '../../assets/logo-light.png';
 
 export function Logo({ className = '', inverted = false }) {
+  const { theme } = useTheme();
+  const isDark = inverted || theme === 'dark';
   const color = inverted ? 'text-pure' : 'text-text';
+
   return (
-    <span className={`inline-flex items-center gap-1.5 ${color} ${className}`}>
-      <Asterisk className="h-5 w-5 shrink-0" strokeWidth={2.25} aria-hidden="true" />
+    <span className={`inline-flex items-center gap-2 ${color} ${className}`}>
+      <img
+        src={isDark ? logoDark : logoLight}
+        alt=""
+        aria-hidden="true"
+        className="h-5 w-auto shrink-0 object-contain"
+      />
       <span className="text-base font-medium uppercase tracking-[0.04em]">ZainSaham</span>
     </span>
   );

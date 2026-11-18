@@ -73,8 +73,18 @@ export function createThemedChart(container, colors) {
   });
 }
 
-export function showLatest(chart) {
-  chart.timeScale().fitContent();
+const VISIBLE_BARS = 120;
+
+export function showLatest(chart, count) {
+  const timeScale = chart.timeScale();
+  if (!count || count <= VISIBLE_BARS) {
+    timeScale.fitContent();
+    return;
+  }
+  timeScale.setVisibleLogicalRange({
+    from: count - VISIBLE_BARS,
+    to: count - 0.5 + timeScale.options().rightOffset,
+  });
 }
 
 export function continuesSeries(previous, next, dateField) {
