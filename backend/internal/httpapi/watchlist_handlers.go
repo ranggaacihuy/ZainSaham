@@ -76,7 +76,13 @@ func (s *Server) addToWatchlist(c *gin.Context) {
 	}
 
 	item := models.Watchlist{}
-	if err := s.db.Where(models.Watchlist{UserID: req.UserID, StockID: req.StockID}).FirstOrCreate(&item).Error; err != nil {
+	where := models.Watchlist{UserID: req.UserID, StockID: req.StockID}
+	err := s.db.Where(where).FirstOrCreate(&item).Error
+	if errors.Is(err, gorm.ErrDuplicatedKey) {
+		// Permintaan lain menambahkan saham yang sama lebih dulu.
+		err = s.db.Where(where).First(&item).Error
+	}
+	if err != nil {
 		serverError(c, err)
 		return
 	}

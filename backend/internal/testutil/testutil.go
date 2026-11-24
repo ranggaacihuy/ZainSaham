@@ -64,7 +64,7 @@ func User(t testing.TB, db *gorm.DB, email string) *models.User {
 func Token(t testing.TB, db *gorm.DB, user *models.User) string {
 	t.Helper()
 
-	token, err := auth.IssueToken(db, user)
+	token, err := auth.IssueToken(db, user, 24*time.Hour)
 	if err != nil {
 		t.Fatal(err)
 	}

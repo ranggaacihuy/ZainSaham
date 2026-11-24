@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -72,7 +73,23 @@ func (s *Server) updateProfile(c *gin.Context) {
 		updates["password_hash"] = hash
 	}
 
-	if err := s.db.Model(user).Updates(updates).Error; err != nil {
+	err := s.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Model(user).Updates(updates).Error; err != nil {
+			return err
+		}
+
+		// Kata sandi baru mengakhiri sesi di perangkat lain.
+		if changingPassword {
+			return auth.RevokeOthers(tx, user.UserID, currentToken(c).ID)
+		}
+
+		return nil
+	})
+	if errors.Is(err, gorm.ErrDuplicatedKey) {
+		validationError(c, "email", "Email sudah terdaftar.")
+		return
+	}
+	if err != nil {
 		serverError(c, err)
 		return
 	}

@@ -141,6 +141,8 @@ func TestPrivateEndpointsNeedLogin(t *testing.T) {
 		{http.MethodPost, "/api/ai-analysis"},
 		{http.MethodPost, "/api/ai-chat"},
 		{http.MethodGet, "/api/ai-chat/1/messages"},
+		{http.MethodGet, "/api/stocks/1/quote"},
+		{http.MethodGet, "/api/stocks/1/intraday"},
 	} {
 		res := e.call(route.method, route.path, "", map[string]any{})
 		if res.status != http.StatusUnauthorized {

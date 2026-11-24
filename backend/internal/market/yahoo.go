@@ -343,36 +343,6 @@ func (y *Yahoo) FetchIntraday(ctx context.Context, ticker string, spec IntradayS
 	return chart, nil
 }
 
-func (y *Yahoo) FetchHourly(ctx context.Context, ticker, dataRange string) ([]IntradayCandle, error) {
-	if dataRange == "" {
-		dataRange = "1mo"
-	}
-
-	symbol := y.Symbol(ticker)
-	endpoint := fmt.Sprintf("%s/v8/finance/chart/%s?%s", y.baseURL, url.PathEscape(symbol), url.Values{
-		"range":    {dataRange},
-		"interval": {"1h"},
-	}.Encode())
-
-	status, raw, err := y.getWithRetry(ctx, endpoint)
-	if err != nil {
-		return nil, fmt.Errorf("Yahoo Finance gagal untuk %s: %w", symbol, err)
-	}
-	if status == http.StatusNotFound {
-		return nil, fmt.Errorf("Kode saham %s tidak dikenali Yahoo Finance.", symbol)
-	}
-	if status >= http.StatusBadRequest {
-		return nil, fmt.Errorf("Yahoo Finance gagal untuk %s: HTTP %d", symbol, status)
-	}
-
-	chart, err := parseIntradayChart(symbol, raw)
-	if err != nil {
-		return nil, err
-	}
-
-	return chart.Candles, nil
-}
-
 func parseIntradayChart(symbol string, raw []byte) (*IntradayChart, error) {
 	var payload struct {
 		Chart struct {

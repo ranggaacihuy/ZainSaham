@@ -80,6 +80,7 @@ type IndicatorPoint struct {
 
 type FundamentalPoint struct {
 	Period           string   `json:"period"`
+	PeriodType       string   `json:"period_type,omitempty"`
 	Revenue          *float64 `json:"revenue"`
 	NetIncome        *float64 `json:"net_income"`
 	TotalAssets      *float64 `json:"total_assets"`
@@ -195,13 +196,22 @@ func (s *Service) BuildContext(stock *models.Stock, analysisType string) (*Conte
 
 	if limit.fundamentals > 0 {
 		var rows []models.StockFundamental
-		if err := s.db.Where("stock_id = ?", stock.StockID).Order("period desc").Limit(limit.fundamentals).Find(&rows).Error; err != nil {
+		if err := s.db.Where("stock_id = ?", stock.StockID).Order("period desc").Find(&rows).Error; err != nil {
 			return nil, err
 		}
 
+		// Ambil periode terbaru per jenis (kuartalan dan tahunan) secara terpisah.
+		// Urutan string menaruh "2025-Q4" sebelum "2025-FY", jadi batas gabungan
+		// bisa mencampur angka kuartal dengan angka setahun penuh.
+		perType := map[string]int{}
 		for _, f := range rows {
+			if perType[f.PeriodType] >= limit.fundamentals {
+				continue
+			}
+			perType[f.PeriodType]++
+
 			context.Fundamentals = append(context.Fundamentals, FundamentalPoint{
-				Period: f.Period, Revenue: f.Revenue, NetIncome: f.NetIncome, TotalAssets: f.TotalAssets,
+				Period: f.Period, PeriodType: f.PeriodType, Revenue: f.Revenue, NetIncome: f.NetIncome, TotalAssets: f.TotalAssets,
 				TotalLiabilities: f.TotalLiabilities, TotalEquity: f.TotalEquity, EPS: f.EPS,
 				ROEPct: f.ROE, ROAPct: f.ROA, DebtToEquity: f.DebtToEquity,
 			})
@@ -260,6 +270,7 @@ func (s *Service) Analyze(ctx context.Context, c *Context) (string, string, erro
 		"- Sebutkan angka dan tanggal penting dari data untuk mendukung setiap poin.",
 		"- Jangan memberi rekomendasi beli, jual, atau tahan, dan jangan menjanjikan keuntungan. Sampaikan skenario dan hal yang perlu dipantau.",
 		"- Selalu bahas risiko.",
+		"- Data fundamental bertanda period_type: quarterly berisi angka satu kuartal, annual berisi angka setahun penuh. Jangan membandingkan keduanya secara langsung. ROE dan ROA kuartalan sudah disetahunkan.",
 	}, "\n")
 
 	label, ok := labels[c.AnalysisType]
@@ -294,6 +305,7 @@ func (s *Service) Chat(ctx context.Context, history []gemini.Message, c *Context
 		"- Sebutkan tanggal data bila menyebut harga atau indikator.",
 		"- Jelaskan risiko. Jangan menjanjikan keuntungan dan jangan memberi perintah beli/jual; ini bukan saran investasi.",
 		"- Tolak dengan sopan pertanyaan yang tidak berhubungan dengan saham, pasar modal, atau keuangan.",
+		"- Fundamental quarterly berisi angka satu kuartal, annual berisi angka setahun penuh; jangan membandingkan keduanya secara langsung.",
 		"",
 		"Data saham (JSON, harga dalam rupiah):",
 		c.JSON(),
@@ -319,7 +331,7 @@ func instructions(analysisType string) string {
 		return strings.Join([]string{
 			"Bahas dengan bagian berikut:",
 			"## Ringkasan",
-			"## Pertumbuhan (pendapatan dan laba bersih antar periode)",
+			"## Pertumbuhan (pendapatan dan laba bersih antar periode; bandingkan kuartal dengan kuartal dan tahunan dengan tahunan)",
 			"## Profitabilitas (ROE, ROA, margin laba bersih = laba bersih / pendapatan)",
 			"## Struktur Modal (debt to equity, liabilitas terhadap aset)",
 			"## EPS",

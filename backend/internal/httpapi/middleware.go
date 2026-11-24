@@ -62,25 +62,45 @@ func (rl *rateLimiter) allow(key string, now time.Time) bool {
 	return true
 }
 
-func (s *Server) rateLimitIntraday(c *gin.Context) {
-	if s.intradayLimiter == nil {
-		c.Next()
-		return
-	}
+// blocked melaporkan apakah key sudah mencapai batas tanpa menambah hitungan.
+func (rl *rateLimiter) blocked(key string, now time.Time) bool {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
 
-	key := "ip:" + c.ClientIP()
-	if rawUser, exists := c.Get(userKey); exists {
-		if user, ok := rawUser.(*models.User); ok && user != nil {
-			key = "user:" + strconv.FormatUint(uint64(user.UserID), 10)
+	b, ok := rl.buckets[key]
+
+	return ok && now.Before(b.reset) && b.count >= rl.limit
+}
+
+func (rl *rateLimiter) reset(key string) {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+
+	delete(rl.buckets, key)
+}
+
+// rateLimit membatasi permintaan per pengguna (atau per IP bila belum login).
+func rateLimit(limiter *rateLimiter, message string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if limiter == nil {
+			c.Next()
+			return
 		}
-	}
 
-	if !s.intradayLimiter.allow(key, time.Now()) {
-		fail(c, http.StatusTooManyRequests, "Terlalu banyak permintaan data intraday. Coba lagi sebentar.")
-		return
-	}
+		key := "ip:" + c.ClientIP()
+		if rawUser, exists := c.Get(userKey); exists {
+			if user, ok := rawUser.(*models.User); ok && user != nil {
+				key = "user:" + strconv.FormatUint(uint64(user.UserID), 10)
+			}
+		}
 
-	c.Next()
+		if !limiter.allow(key, time.Now()) {
+			fail(c, http.StatusTooManyRequests, message)
+			return
+		}
+
+		c.Next()
+	}
 }
 
 const (

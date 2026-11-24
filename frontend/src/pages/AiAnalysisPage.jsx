@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import {
   Activity,
@@ -68,7 +68,12 @@ const PREVIEW_CARDS = [
   },
 ];
 
-const chatSessionsByStock = new Map();
+// Sesi chat terakhir per pengguna dan saham. Kuncinya memuat user_id supaya
+// pengguna lain di tab yang sama tidak mewarisi sesi pengguna sebelumnya.
+const chatSessions = new Map();
+const chatSessionKey = (userId, stockId) => `${userId}:${stockId}`;
+
+const IDLE_RUN = { status: 'idle', result: null, error: null, ticker: null };
 
 function StockSelect({ stocks, value, onChange }) {
   return (
@@ -233,8 +238,12 @@ export default function AiAnalysisPage() {
   const stock = stocks.data?.find((s) => s.ticker === ticker) || null;
 
   const [analysisType, setAnalysisType] = useState('combined');
-  const [run, setRun] = useState({ status: 'idle', result: null, error: null, ticker: null });
+  const [runState, setRun] = useState(IDLE_RUN);
+  const runId = useRef(0);
   const [chatKey, setChatKey] = useState(0);
+  // Hasil analisis hanya ditampilkan untuk saham yang memintanya.
+  const run = stock && runState.ticker === stock.ticker ? runState : IDLE_RUN;
+  const rememberedSession = (stockId) => chatSessions.get(chatSessionKey(user.user_id, stockId)) ?? null;
 
   const updateParams = (changes) => {
     const next = new URLSearchParams(searchParams);
@@ -247,37 +256,40 @@ export default function AiAnalysisPage() {
 
   const selectStock = (nextTicker) => {
     const next = stocks.data?.find((s) => s.ticker === nextTicker);
-    const remembered = next ? chatSessionsByStock.get(next.stock_id) : null;
+    const remembered = next ? rememberedSession(next.stock_id) : null;
     updateParams({ ticker: nextTicker, session: mode === 'chat' ? remembered : null });
-    if (run.ticker !== nextTicker) setRun({ status: 'idle', result: null, error: null, ticker: null });
   };
 
   const setMode = (value) => {
-    const remembered = stock ? chatSessionsByStock.get(stock.stock_id) : null;
+    const remembered = stock ? rememberedSession(stock.stock_id) : null;
     updateParams({ mode: value === 'chat' ? 'chat' : null, session: value === 'chat' ? remembered : null });
   };
 
   const runAnalysis = async () => {
     if (!stock) return;
-    setRun({ status: 'running', result: null, error: null, ticker: stock.ticker });
+    const id = ++runId.current;
+    const { ticker: runTicker } = stock;
+    setRun({ status: 'running', result: null, error: null, ticker: runTicker });
     try {
       const { analysis } = await analyze({ userId: user.user_id, stockId: stock.stock_id, analysisType });
-      setRun({ status: 'done', result: analysis, error: null, ticker: stock.ticker });
+      if (id === runId.current) setRun({ status: 'done', result: analysis, error: null, ticker: runTicker });
     } catch (error) {
-      setRun({ status: 'error', result: null, error, ticker: stock.ticker });
+      if (id !== runId.current) return;
+      setRun({ status: 'error', result: null, error, ticker: runTicker });
       if (error.status === 422) addToast(error.message, 'error');
     }
   };
 
   const onSessionChange = (id) => {
     if (!stock) return;
-    if (id) chatSessionsByStock.set(stock.stock_id, id);
-    else chatSessionsByStock.delete(stock.stock_id);
+    const key = chatSessionKey(user.user_id, stock.stock_id);
+    if (id) chatSessions.set(key, id);
+    else chatSessions.delete(key);
     updateParams({ session: id });
   };
 
   const newConversation = () => {
-    if (stock) chatSessionsByStock.delete(stock.stock_id);
+    if (stock) chatSessions.delete(chatSessionKey(user.user_id, stock.stock_id));
     updateParams({ session: null });
     setChatKey((k) => k + 1);
   };

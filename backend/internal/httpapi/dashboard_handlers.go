@@ -22,6 +22,13 @@ type mover struct {
 	Summary *market.Summary `json:"summary"`
 }
 
+type moverBoard struct {
+	Date    *models.Date `json:"date"`
+	Total   int          `json:"total"`
+	Gainers []mover      `json:"gainers"`
+	Losers  []mover      `json:"losers"`
+}
+
 type analysisItem struct {
 	models.AiAnalysis
 	Stock *models.Stock `json:"stock"`
@@ -60,7 +67,7 @@ func (s *Server) dashboard(c *gin.Context) {
 		}
 	}
 
-	gainers, losers, lastDate, err := s.movers()
+	movers, lastDate, err := s.movers()
 	if err != nil {
 		serverError(c, err)
 		return
@@ -72,22 +79,46 @@ func (s *Server) dashboard(c *gin.Context) {
 		return
 	}
 
+	stats, err := s.watchlistStats(watchlist, movers.Date)
+	if err != nil {
+		serverError(c, err)
+		return
+	}
+
 	ok(c, gin.H{
 		"last_price_date": lastDate,
 		"index":           index,
-		"stats":           watchlistStats(watchlist),
+		"stats":           stats,
 		"watchlist":       watchlist,
 		"news":            news,
 		"analyses":        analyses,
-		"movers":          gin.H{"gainers": gainers, "losers": losers},
+		"movers":          movers,
 	})
 }
 
-func watchlistStats(items []watchlistItem) gin.H {
+// watchlistStats menghitung perubahan watchlist pada tanggal acuan yang sama
+// dengan top movers, supaya emiten yang harganya tertinggal tidak ikut dihitung
+// sebagai perubahan "hari ini".
+func (s *Server) watchlistStats(items []watchlistItem, date *models.Date) (gin.H, error) {
+	stats := gin.H{"count": len(items), "date": date, "avg_change_pct": nil, "up": 0, "down": 0}
+	if date == nil || len(items) == 0 {
+		return stats, nil
+	}
+
+	ids := make([]uint, len(items))
+	for i, item := range items {
+		ids[i] = item.StockID
+	}
+
+	summaries, err := s.market.Summaries(ids, market.SummaryOptions{AsOf: date})
+	if err != nil {
+		return nil, err
+	}
+
 	var changes []float64
-	for _, item := range items {
-		if item.Summary != nil && item.Summary.ChangePct != nil {
-			changes = append(changes, *item.Summary.ChangePct)
+	for _, summary := range summaries {
+		if summary.PriceDate != nil && summary.PriceDate.Equal(date.Time) && summary.ChangePct != nil {
+			changes = append(changes, *summary.ChangePct)
 		}
 	}
 
@@ -101,12 +132,12 @@ func watchlistStats(items []watchlistItem) gin.H {
 		}
 	}
 
-	var average *float64
 	if len(changes) > 0 {
-		average = new(math.Round(sum/float64(len(changes))*100) / 100)
+		stats["avg_change_pct"] = math.Round(sum/float64(len(changes))*100) / 100
 	}
+	stats["up"], stats["down"] = up, down
 
-	return gin.H{"count": len(items), "avg_change_pct": average, "up": up, "down": down}
+	return stats, nil
 }
 
 func (s *Server) latestAnalyses(userID uint, stockIDs []uint) ([]analysisItem, error) {
@@ -154,10 +185,15 @@ func (s *Server) marketIndex() (*mover, error) {
 	return &mover{Stock: index, Summary: summaries[index.StockID]}, nil
 }
 
-func (s *Server) movers() ([]mover, []mover, *models.Date, error) {
+// movers membandingkan semua emiten pada satu tanggal acuan yang sama. Emiten
+// yang harganya tertinggal (suspensi, sinkronisasi gagal, atau belum terambil
+// pada putaran sinkronisasi saat ini) tidak ikut diperingkat.
+func (s *Server) movers() (moverBoard, *models.Date, error) {
+	board := moverBoard{Gainers: []mover{}, Losers: []mover{}}
+
 	var stocks []models.Stock
 	if err := s.db.Where("kind = ?", models.KindStock).Order("ticker").Find(&stocks).Error; err != nil {
-		return nil, nil, nil, err
+		return board, nil, err
 	}
 
 	ids := make([]uint, len(stocks))
@@ -167,42 +203,77 @@ func (s *Server) movers() ([]mover, []mover, *models.Date, error) {
 
 	summaries, err := s.market.Summaries(ids, market.SummaryOptions{})
 	if err != nil {
-		return nil, nil, nil, err
+		return board, nil, err
 	}
 
 	var lastDate *models.Date
+	for _, summary := range summaries {
+		if summary.PriceDate != nil && (lastDate == nil || summary.PriceDate.After(lastDate.Time)) {
+			lastDate = summary.PriceDate
+		}
+	}
+
+	date := referenceDate(summaries)
+	if date == nil {
+		return board, lastDate, nil
+	}
+	board.Date = date
+
+	// Emiten yang sudah punya harga setelah tanggal acuan dihitung ulang
+	// perubahannya per tanggal acuan, supaya tetap sebanding dengan yang lain.
+	if date.Before(lastDate.Time) {
+		if summaries, err = s.market.Summaries(ids, market.SummaryOptions{AsOf: date}); err != nil {
+			return board, nil, err
+		}
+	}
+
 	ranked := make([]mover, 0, len(stocks))
 
 	for _, stock := range stocks {
 		summary := summaries[stock.StockID]
-		if summary == nil {
+		if summary == nil || summary.PriceDate == nil || !summary.PriceDate.Equal(date.Time) || summary.ChangePct == nil {
 			continue
 		}
 
-		if summary.PriceDate != nil && (lastDate == nil || summary.PriceDate.After(lastDate.Time)) {
-			lastDate = summary.PriceDate
-		}
-
-		if summary.ChangePct != nil {
-			ranked = append(ranked, mover{Stock: stock, Summary: summary})
-		}
+		ranked = append(ranked, mover{Stock: stock, Summary: summary})
 	}
+
+	board.Total = len(ranked)
 
 	sort.SliceStable(ranked, func(i, j int) bool { return *ranked[i].Summary.ChangePct > *ranked[j].Summary.ChangePct })
 
-	gainers := []mover{}
 	for _, item := range ranked {
-		if *item.Summary.ChangePct > 0 && len(gainers) < dashboardMovers {
-			gainers = append(gainers, item)
+		if *item.Summary.ChangePct > 0 && len(board.Gainers) < dashboardMovers {
+			board.Gainers = append(board.Gainers, item)
 		}
 	}
 
-	losers := []mover{}
 	for i := len(ranked) - 1; i >= 0; i-- {
-		if *ranked[i].Summary.ChangePct < 0 && len(losers) < dashboardMovers {
-			losers = append(losers, ranked[i])
+		if *ranked[i].Summary.ChangePct < 0 && len(board.Losers) < dashboardMovers {
+			board.Losers = append(board.Losers, ranked[i])
 		}
 	}
 
-	return gainers, losers, lastDate, nil
+	return board, lastDate, nil
+}
+
+// referenceDate memilih tanggal harga terbaru yang sudah dicapai setidaknya
+// separuh emiten. Dengan begitu satu emiten yang lebih dulu diperbarui (misalnya
+// lewat endpoint quote) tidak menggeser tanggal pembanding, dan emiten yang
+// tertinggal tidak menariknya mundur.
+func referenceDate(summaries map[uint]*market.Summary) *models.Date {
+	dates := make([]models.Date, 0, len(summaries))
+	for _, summary := range summaries {
+		if summary != nil && summary.PriceDate != nil {
+			dates = append(dates, *summary.PriceDate)
+		}
+	}
+
+	if len(dates) == 0 {
+		return nil
+	}
+
+	sort.Slice(dates, func(i, j int) bool { return dates[i].After(dates[j].Time) })
+
+	return new(dates[(len(dates)-1)/2])
 }

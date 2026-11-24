@@ -2,6 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 import { getQuote } from '../api/stocks';
 
 const POLL_INTERVAL = 30 * 1000;
+// Saat pasar tutup tetap dicek berkala, supaya halaman yang dibuka sebelum
+// bursa buka otomatis menjadi live tanpa perlu dimuat ulang.
+const CLOSED_POLL_INTERVAL = 5 * 60 * 1000;
 
 export default function useLiveQuote(stockId, onPrice) {
   const [state, setState] = useState({ isOpen: false, updatedAt: null, error: null });
@@ -20,8 +23,8 @@ export default function useLiveQuote(stockId, onPrice) {
 
     const schedule = () => {
       clearTimeout(timer);
-      if (!cancelled && lastOpen && document.visibilityState === 'visible') {
-        timer = setTimeout(tick, POLL_INTERVAL);
+      if (!cancelled && document.visibilityState === 'visible') {
+        timer = setTimeout(tick, lastOpen ? POLL_INTERVAL : CLOSED_POLL_INTERVAL);
       }
     };
 

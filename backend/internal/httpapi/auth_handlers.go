@@ -1,12 +1,20 @@
 package httpapi
 
 import (
+	"errors"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/ranggaacihuy/zainsaham/backend/internal/auth"
 	"github.com/ranggaacihuy/zainsaham/backend/internal/models"
+	"gorm.io/gorm"
+)
+
+const (
+	loginMaxFailures = 10
+	loginLockout     = 15 * time.Minute
 )
 
 type registerRequest struct {
@@ -48,11 +56,15 @@ func (s *Server) register(c *gin.Context) {
 
 	user := models.User{Name: strings.TrimSpace(req.Name), Email: email, PasswordHash: hash}
 	if err := s.db.Create(&user).Error; err != nil {
+		if errors.Is(err, gorm.ErrDuplicatedKey) {
+			validationError(c, "email", "Email sudah terdaftar.")
+			return
+		}
 		serverError(c, err)
 		return
 	}
 
-	token, err := auth.IssueToken(s.db, &user)
+	token, err := auth.IssueToken(s.db, &user, s.cfg.TokenTTL)
 	if err != nil {
 		serverError(c, err)
 		return
@@ -67,20 +79,50 @@ func (s *Server) login(c *gin.Context) {
 		return
 	}
 
+	email := strings.ToLower(strings.TrimSpace(req.Email))
+	limitKey := "login:" + email
+	if s.loginLimiter.blocked(limitKey, time.Now()) {
+		fail(c, http.StatusTooManyRequests, "Terlalu banyak percobaan masuk. Coba lagi dalam 15 menit.")
+		return
+	}
+
 	var user models.User
-	err := s.db.Where("email = ?", strings.ToLower(strings.TrimSpace(req.Email))).First(&user).Error
-	if err != nil || !auth.CheckPassword(user.PasswordHash, req.Password) {
+	err := s.db.Where("email = ?", email).First(&user).Error
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		serverError(c, err)
+		return
+	}
+
+	// Tetap jalankan bcrypt saat email tidak terdaftar supaya waktu respons
+	// tidak membocorkan email mana yang ada.
+	hash := user.PasswordHash
+	if err != nil {
+		hash = s.fakePasswordHash()
+	}
+
+	if !auth.CheckPassword(hash, req.Password) || err != nil {
+		s.loginLimiter.allow(limitKey, time.Now())
 		fail(c, http.StatusUnauthorized, "Email atau kata sandi salah.")
 		return
 	}
 
-	token, err := auth.IssueToken(s.db, &user)
+	s.loginLimiter.reset(limitKey)
+
+	token, err := auth.IssueToken(s.db, &user, s.cfg.TokenTTL)
 	if err != nil {
 		serverError(c, err)
 		return
 	}
 
 	respond(c, http.StatusOK, "Berhasil masuk.", gin.H{"user": user, "token": token})
+}
+
+func (s *Server) fakePasswordHash() string {
+	s.dummyHashOnce.Do(func() {
+		s.dummyHash, _ = auth.HashPassword("zainsaham-dummy-password", s.cfg.BcryptCost)
+	})
+
+	return s.dummyHash
 }
 
 func (s *Server) me(c *gin.Context) {

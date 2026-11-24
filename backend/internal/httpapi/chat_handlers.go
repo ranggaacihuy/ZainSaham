@@ -74,25 +74,16 @@ func (s *Server) chat(c *gin.Context) {
 	}
 
 	var recent []models.AiMessage
-	if err := s.db.Where("session_id = ?", session.SessionID).
-		Order("created_at desc").
-		Order("message_id desc").
-		Limit(chatHistoryLimit).
-		Find(&recent).Error; err != nil {
-		serverError(c, err)
-		return
-	}
-	slices.Reverse(recent)
-
-	userMessage := models.AiMessage{SessionID: session.SessionID, Role: "user", Content: req.Message, CreatedAt: time.Now().UTC()}
-	if err := s.db.Create(&userMessage).Error; err != nil {
-		serverError(c, err)
-		return
-	}
-
-	if err := s.db.Model(session).Update("updated_at", userMessage.CreatedAt).Error; err != nil {
-		serverError(c, err)
-		return
+	if session.SessionID != 0 {
+		if err := s.db.Where("session_id = ?", session.SessionID).
+			Order("created_at desc").
+			Order("message_id desc").
+			Limit(chatHistoryLimit).
+			Find(&recent).Error; err != nil {
+			serverError(c, err)
+			return
+		}
+		slices.Reverse(recent)
 	}
 
 	history := make([]gemini.Message, 0, len(recent)+1)
@@ -101,15 +92,40 @@ func (s *Server) chat(c *gin.Context) {
 	}
 	history = append(history, gemini.Message{Role: "user", Content: req.Message})
 
+	askedAt := time.Now().UTC()
+
 	reply, _, err := s.analysis.Chat(c.Request.Context(), history, context)
 	if err != nil {
+		// Pesan pengguna tidak disimpan saat AI gagal, supaya "Kirim ulang" di
+		// frontend tidak membuat pertanyaan yang sama tersimpan dua kali.
 		log.Printf("chat AI %s: %v", stock.Ticker, err)
-		failWithData(c, http.StatusBadGateway, aiErrorMessage(err), gin.H{"session_id": session.SessionID})
+		fail(c, http.StatusBadGateway, aiErrorMessage(err))
 		return
 	}
 
-	assistant := models.AiMessage{SessionID: session.SessionID, Role: "assistant", Content: reply, CreatedAt: time.Now().UTC()}
-	if err := s.db.Create(&assistant).Error; err != nil {
+	userMessage := models.AiMessage{Role: "user", Content: req.Message, CreatedAt: askedAt}
+	assistant := models.AiMessage{Role: "assistant", Content: reply, CreatedAt: time.Now().UTC()}
+
+	err = s.db.Transaction(func(tx *gorm.DB) error {
+		if session.SessionID == 0 {
+			if err := tx.Create(session).Error; err != nil {
+				return err
+			}
+		}
+
+		userMessage.SessionID = session.SessionID
+		assistant.SessionID = session.SessionID
+
+		if err := tx.Create(&userMessage).Error; err != nil {
+			return err
+		}
+		if err := tx.Create(&assistant).Error; err != nil {
+			return err
+		}
+
+		return tx.Model(session).Update("updated_at", assistant.CreatedAt).Error
+	})
+	if err != nil {
 		serverError(c, err)
 		return
 	}
@@ -122,6 +138,8 @@ func (s *Server) chat(c *gin.Context) {
 	})
 }
 
+// chatSession memuat sesi yang diminta. Untuk percakapan baru, sesi belum
+// disimpan dan baru dibuat setelah AI berhasil membalas.
 func (s *Server) chatSession(c *gin.Context, req chatRequest, stock *models.Stock) (*models.AnalysisSession, bool) {
 	session := &models.AnalysisSession{}
 
@@ -142,11 +160,6 @@ func (s *Server) chatSession(c *gin.Context, req chatRequest, stock *models.Stoc
 	session.UserID = req.UserID
 	session.StockID = stock.StockID
 	session.AnalysisType = "combined"
-
-	if err := s.db.Create(session).Error; err != nil {
-		serverError(c, err)
-		return nil, false
-	}
 
 	return session, true
 }

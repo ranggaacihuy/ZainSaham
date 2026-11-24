@@ -23,6 +23,7 @@ export async function getDashboard() {
     index: data.index ? normalizeMover(data.index) : null,
     stats: {
       count: toNumber(stats.count) ?? 0,
+      date: toDateKey(stats.date),
       avgChangePct: toNumber(stats.avg_change_pct),
       up: toNumber(stats.up) ?? 0,
       down: toNumber(stats.down) ?? 0,
@@ -30,6 +31,8 @@ export async function getDashboard() {
     watchlist: normalizeList(data.watchlist, normalizeWatchlistItem),
     news: normalizeList(data.news, normalizeNews),
     analyses: normalizeList(data.analyses, normalizeAnalysis),
+    moversDate: toDateKey(data.movers?.date),
+    moversTotal: toNumber(data.movers?.total) ?? 0,
     gainers: normalizeList(data.movers?.gainers, normalizeMover),
     losers: normalizeList(data.movers?.losers, normalizeMover),
   };

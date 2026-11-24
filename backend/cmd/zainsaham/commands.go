@@ -107,6 +107,10 @@ Yahoo Finance dilewati.
 
 Flag -limit mengatur jumlah emiten terbesar yang diperiksa. Bawaannya
 mengikuti LISTINGS_LIMIT, dan 0 berarti semua emiten BEI.
+
+Harga diperbarui satu emiten per YAHOO_FINANCE_DELAY_MS (bawaan 800 ms).
+Dengan ratusan emiten, satu putaran pembaruan bisa mendekati atau melebihi
+jadwal 15 menit; putaran berikutnya dilewati sampai putaran sebelumnya selesai.
 `,
 		setFlags: func(fs *flag.FlagSet) {
 			fs.IntVar(&listingsFlags.limit, "limit", -1, "")

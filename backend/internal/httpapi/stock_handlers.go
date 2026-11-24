@@ -1,11 +1,13 @@
 package httpapi
 
 import (
+	"context"
 	"errors"
 	"log"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/ranggaacihuy/zainsaham/backend/internal/market"
@@ -14,11 +16,17 @@ import (
 )
 
 const (
-	stockNotFound   = "Saham tidak ditemukan."
-	defaultPerPage  = 20
-	maxPerPage      = 100
-	defaultNewsSize = 10
-	maxNewsSize     = 50
+	stockNotFound    = "Saham tidak ditemukan."
+	defaultPerPage   = 20
+	maxPerPage       = 100
+	defaultNewsSize  = 10
+	defaultStockNews = 20
+	maxNewsSize      = 50
+
+	// Batas tunggu endpoint interaktif. Harus lebih pendek dari timeout klien
+	// (15 detik) supaya pengguna mendapat pesan yang jelas. Pengambilan data ke
+	// Yahoo tetap berjalan di belakang dan hasilnya masuk cache.
+	liveDataTimeout = 12 * time.Second
 )
 
 var rangeMonths = map[string]int{
@@ -52,7 +60,7 @@ func (s *Server) listStocks(c *gin.Context) {
 
 	if q := strings.ToLower(strings.TrimSpace(c.Query("q"))); q != "" {
 		pattern := escapeLike(q)
-		query = query.Where(`LOWER(ticker) LIKE ? ESCAPE '\' OR LOWER(company_name) LIKE ? ESCAPE '\'`, pattern+"%", "%"+pattern+"%")
+		query = query.Where(`LOWER(ticker) LIKE ? ESCAPE '!' OR LOWER(company_name) LIKE ? ESCAPE '!'`, pattern+"%", "%"+pattern+"%")
 	}
 
 	if sector := strings.TrimSpace(c.Query("sector")); sector != "" {
@@ -152,20 +160,6 @@ func (s *Server) stockPrices(c *gin.Context) {
 		return
 	}
 
-	if c.Query("interval") == "1h" {
-		stock, found := s.findStock(c, id)
-		if !found {
-			return
-		}
-		candles, err := s.market.Hourly(c.Request.Context(), stock)
-		if err != nil {
-			fail(c, http.StatusBadGateway, "Gagal mengambil data harga per jam.")
-			return
-		}
-		ok(c, candles)
-		return
-	}
-
 	cutoff, valid := s.rangeCutoff(c, id)
 	if !valid {
 		return
@@ -258,8 +252,10 @@ func (s *Server) stockNews(c *gin.Context) {
 		return
 	}
 
+	limit := min(maxNewsSize, max(1, queryInt(c, "limit", defaultStockNews)))
+
 	rows := []models.News{}
-	if err := s.db.Where("stock_id = ?", id).Order("published_at desc").Find(&rows).Error; err != nil {
+	if err := s.db.Where("stock_id = ?", id).Order("published_at desc").Limit(limit).Find(&rows).Error; err != nil {
 		serverError(c, err)
 		return
 	}
@@ -305,7 +301,10 @@ func (s *Server) stockQuote(c *gin.Context) {
 		return
 	}
 
-	quote, err := s.market.Quote(c.Request.Context(), stock)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), liveDataTimeout)
+	defer cancel()
+
+	quote, err := s.market.Quote(ctx, stock)
 	if err != nil {
 		log.Printf("quote %s: %v", stock.Ticker, err)
 		fail(c, http.StatusBadGateway, "Data harga realtime belum dapat diambil dari Yahoo Finance.")
@@ -332,7 +331,10 @@ func (s *Server) stockIntraday(c *gin.Context) {
 		return
 	}
 
-	data, err := s.market.Intraday(c.Request.Context(), stock, interval)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), liveDataTimeout)
+	defer cancel()
+
+	data, err := s.market.Intraday(ctx, stock, interval)
 	if err != nil {
 		if errors.Is(err, market.ErrInvalidInterval) {
 			validationError(c, "interval", "Interval tidak valid. Pilih 1m, 5m, 10m, 15m, 1h, 2h, atau 4h.")
@@ -355,6 +357,8 @@ func queryInt(c *gin.Context, key string, fallback int) int {
 	return value
 }
 
+// escapeLike memakai "!" sebagai karakter escape. Backslash tidak dipakai
+// karena di MySQL '\' di dalam literal string ikut meng-escape tanda kutip.
 func escapeLike(value string) string {
-	return strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(value)
+	return strings.NewReplacer(`!`, `!!`, `%`, `!%`, `_`, `!_`).Replace(value)
 }

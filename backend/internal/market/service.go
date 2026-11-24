@@ -62,11 +62,6 @@ type cachedQuote struct {
 	expires time.Time
 }
 
-type cachedHourly struct {
-	candles []IntradayCandle
-	expires time.Time
-}
-
 type SyncOptions struct {
 	Tickers      []string
 	Range        string
@@ -84,7 +79,6 @@ type Service struct {
 	now           func() time.Time
 	mu            sync.Mutex
 	quotes        map[uint]cachedQuote
-	hourly        map[uint]cachedHourly
 	intradayCache map[string]cachedIntraday
 	group         singleflight.Group
 	intradayGroup singleflight.Group
@@ -99,7 +93,6 @@ func NewService(db *gorm.DB, yahoo config.Yahoo, news config.News) *Service {
 		delay:         yahoo.Delay,
 		now:           time.Now,
 		quotes:        map[uint]cachedQuote{},
-		hourly:        map[uint]cachedHourly{},
 		intradayCache: map[string]cachedIntraday{},
 	}
 }
@@ -167,11 +160,34 @@ func (s *Service) Store(stock *models.Stock, chart *Chart) (SyncResult, error) {
 
 func (s *Service) RecalculateIndicators(stockID uint, since *models.Date) (int, error) {
 	var prices []models.StockPrice
-	if err := s.db.Select("price_date", "close_price").
-		Where("stock_id = ?", stockID).
-		Order("price_date").
-		Find(&prices).Error; err != nil {
-		return 0, err
+
+	if since == nil {
+		if err := s.db.Select("price_date", "close_price").
+			Where("stock_id = ?", stockID).
+			Order("price_date").
+			Find(&prices).Error; err != nil {
+			return 0, err
+		}
+	} else {
+		// Indikator tiap tanggal hanya butuh indicatorWindow harga terakhir,
+		// jadi cukup ambil indicatorWindow-1 harga sebelum since.
+		if err := s.db.Select("price_date", "close_price").
+			Where("stock_id = ? AND price_date < ?", stockID, *since).
+			Order("price_date desc").
+			Limit(indicatorWindow - 1).
+			Find(&prices).Error; err != nil {
+			return 0, err
+		}
+		slices.Reverse(prices)
+
+		var recent []models.StockPrice
+		if err := s.db.Select("price_date", "close_price").
+			Where("stock_id = ? AND price_date >= ?", stockID, *since).
+			Order("price_date").
+			Find(&recent).Error; err != nil {
+			return 0, err
+		}
+		prices = append(prices, recent...)
 	}
 
 	closes := make([]float64, len(prices))
@@ -224,7 +240,7 @@ func (s *Service) Quote(ctx context.Context, stock *models.Stock) (*Quote, error
 		return cached.quote, nil
 	}
 
-	value, err, _ := s.group.Do(fmt.Sprint(stock.StockID), func() (any, error) {
+	value, err := shared(ctx, &s.group, fmt.Sprint(stock.StockID), func(ctx context.Context) (any, error) {
 		chart, err := s.yahoo.FetchDaily(ctx, stock.MarketCode(), "5d")
 		if err != nil {
 			return nil, err
@@ -249,37 +265,6 @@ func (s *Service) Quote(ctx context.Context, stock *models.Stock) (*Quote, error
 	return value.(*Quote), nil
 }
 
-func (s *Service) Hourly(ctx context.Context, stock *models.Stock) ([]IntradayCandle, error) {
-	s.mu.Lock()
-	cached, ok := s.hourly[stock.StockID]
-	s.mu.Unlock()
-
-	if ok && s.now().Before(cached.expires) {
-		return cached.candles, nil
-	}
-
-	value, err, _ := s.group.Do(fmt.Sprintf("hourly:%d", stock.StockID), func() (any, error) {
-		candles, err := s.yahoo.FetchHourly(ctx, stock.MarketCode(), "1mo")
-		if err != nil {
-			return nil, err
-		}
-
-		s.mu.Lock()
-		if s.hourly == nil {
-			s.hourly = map[uint]cachedHourly{}
-		}
-		s.hourly[stock.StockID] = cachedHourly{candles: candles, expires: s.now().Add(2 * time.Minute)}
-		s.mu.Unlock()
-
-		return candles, nil
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	return value.([]IntradayCandle), nil
-}
-
 func (s *Service) Intraday(ctx context.Context, stock *models.Stock, interval string) (*IntradayResponse, error) {
 	spec, ok := LookupIntradaySpec(interval)
 	if !ok {
@@ -297,7 +282,7 @@ func (s *Service) Intraday(ctx context.Context, stock *models.Stock, interval st
 		return cached.data, nil
 	}
 
-	value, err, _ := s.intradayGroup.Do(key, func() (any, error) {
+	value, err := shared(ctx, &s.intradayGroup, key, func(ctx context.Context) (any, error) {
 		chart, err := s.yahoo.FetchIntraday(ctx, stock.MarketCode(), spec)
 		if err != nil {
 			return nil, err
@@ -471,15 +456,19 @@ func (s *Service) SyncAll(ctx context.Context, opts SyncOptions, out io.Writer) 
 	}
 
 	failed := 0
+	var started time.Time
 
 	for i := range stocks {
-		if i > 0 && s.delay > 0 {
+		// Jeda dihitung dari awal permintaan sebelumnya, supaya waktu
+		// permintaan tidak menambah durasi satu putaran sinkronisasi.
+		if wait := s.delay - time.Since(started); i > 0 && wait > 0 {
 			select {
 			case <-ctx.Done():
-				return len(stocks[:i]) - failed, failed, ctx.Err()
-			case <-time.After(s.delay):
+				return i - failed, failed, ctx.Err()
+			case <-time.After(wait):
 			}
 		}
+		started = time.Now()
 
 		text, ok := s.syncStock(ctx, &stocks[i], opts)
 		if !ok {
@@ -531,6 +520,23 @@ func (s *Service) syncStock(ctx context.Context, stock *models.Stock, opts SyncO
 	}
 
 	return text, len(errs) == 0
+}
+
+// shared menjalankan fn sekali untuk semua pemanggil dengan key yang sama.
+// fn memakai context yang tidak ikut batal saat pemanggil pertama pergi,
+// sedangkan tiap pemanggil tetap berhenti menunggu saat context-nya sendiri
+// berakhir. Hasilnya tetap disimpan ke cache oleh fn.
+func shared(ctx context.Context, group *singleflight.Group, key string, fn func(context.Context) (any, error)) (any, error) {
+	result := group.DoChan(key, func() (any, error) {
+		return fn(context.WithoutCancel(ctx))
+	})
+
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case res := <-result:
+		return res.Val, res.Err
+	}
 }
 
 func round2(value float64) float64 {

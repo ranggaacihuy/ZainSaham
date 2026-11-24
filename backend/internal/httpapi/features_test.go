@@ -319,3 +319,85 @@ func TestIndexIsSeparatedFromStocks(t *testing.T) {
 		}
 	}
 }
+
+// putCloses menyimpan harga penutupan sebuah emiten. Kunci map adalah jumlah
+// hari sebelum hari ini.
+func putCloses(t *testing.T, e *env, ticker string, closes map[int]float64) {
+	t.Helper()
+
+	stock := testutil.Stock(t, e.db, ticker)
+	today := time.Now().UTC()
+
+	for daysAgo, closePrice := range closes {
+		price := models.StockPrice{
+			StockID: stock.StockID, PriceDate: models.NewDate(today.AddDate(0, 0, -daysAgo)),
+			OpenPrice: closePrice, HighPrice: closePrice, LowPrice: closePrice, ClosePrice: closePrice, Volume: 1,
+		}
+		if err := e.db.Create(&price).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func moverTickers(r *response, group string) []string {
+	var tickers []string
+	for _, item := range r.get("data.movers." + group).([]any) {
+		tickers = append(tickers, item.(map[string]any)["stock"].(map[string]any)["ticker"].(string))
+	}
+
+	return tickers
+}
+
+func TestMoversSkipStocksWithOutdatedPrices(t *testing.T) {
+	e := newEnv(t)
+	token := testutil.Token(t, e.db, testutil.User(t, e.db, "budi@example.test"))
+	today := models.NewDate(time.Now().UTC()).String()
+
+	putCloses(t, e, "UPPP", map[int]float64{1: 1000, 0: 1030})
+	putCloses(t, e, "FRSH", map[int]float64{1: 1000, 0: 1010})
+	putCloses(t, e, "DOWN", map[int]float64{1: 1000, 0: 980})
+	// Harga terakhir sebulan lalu (misalnya suspensi), naik 25% saat itu.
+	putCloses(t, e, "STLE", map[int]float64{31: 100, 30: 125})
+	// Belum tersinkron hari ini, turun 10% kemarin.
+	putCloses(t, e, "LAGG", map[int]float64{2: 1000, 1: 900})
+
+	dash := e.call(http.MethodGet, "/api/dashboard", token, nil).
+		assertStatus(http.StatusOK).
+		assertPath("data.last_price_date", today).
+		assertPath("data.movers.date", today).
+		assertPath("data.movers.total", 3)
+
+	if got := fmt.Sprint(moverTickers(dash, "gainers")); got != "[UPPP FRSH]" {
+		t.Fatalf("gainers = %s, want [UPPP FRSH]. body: %s", got, dash.raw)
+	}
+	if got := fmt.Sprint(moverTickers(dash, "losers")); got != "[DOWN]" {
+		t.Fatalf("losers = %s, want [DOWN]. body: %s", got, dash.raw)
+	}
+}
+
+func TestMoversUseDateReachedByMostStocks(t *testing.T) {
+	e := newEnv(t)
+	token := testutil.Token(t, e.db, testutil.User(t, e.db, "budi@example.test"))
+	today := models.NewDate(time.Now().UTC()).String()
+	yesterday := models.NewDate(time.Now().UTC().AddDate(0, 0, -1)).String()
+
+	// Hanya EARL yang sudah punya harga hari ini (misalnya lewat endpoint quote).
+	putCloses(t, e, "EARL", map[int]float64{2: 1000, 1: 1100, 0: 990})
+	putCloses(t, e, "AAAA", map[int]float64{2: 1000, 1: 1050})
+	putCloses(t, e, "BBBB", map[int]float64{2: 1000, 1: 950})
+
+	dash := e.call(http.MethodGet, "/api/dashboard", token, nil).
+		assertStatus(http.StatusOK).
+		assertPath("data.last_price_date", today).
+		assertPath("data.movers.date", yesterday).
+		assertPath("data.movers.total", 3).
+		assertPath("data.movers.gainers.0.summary.change_pct", 10.0).
+		assertPath("data.movers.gainers.0.summary.price_date", yesterday)
+
+	if got := fmt.Sprint(moverTickers(dash, "gainers")); got != "[EARL AAAA]" {
+		t.Fatalf("gainers = %s, want [EARL AAAA]. body: %s", got, dash.raw)
+	}
+	if got := fmt.Sprint(moverTickers(dash, "losers")); got != "[BBBB]" {
+		t.Fatalf("losers = %s, want [BBBB]. body: %s", got, dash.raw)
+	}
+}

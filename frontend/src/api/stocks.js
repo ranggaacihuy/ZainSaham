@@ -30,27 +30,6 @@ export async function searchStocks({ q = '', sector = '', page = 1, perPage = 20
   };
 }
 
-const hourlyPricesCache = createCache(async (stockId) => {
-  const res = await api.get(`/stocks/${stockId}/prices`, { params: { interval: '1h' } });
-  const list = unwrap(res);
-  if (!Array.isArray(list)) return [];
-  return list
-    .map((raw) => ({
-      timestamp: Number(raw.timestamp),
-      price_date: raw.price_date ?? null,
-      open_price: Number(raw.open_price),
-      high_price: Number(raw.high_price),
-      low_price: Number(raw.low_price),
-      close_price: Number(raw.close_price),
-      volume: Number(raw.volume) || 0,
-    }))
-    .filter((p) => Number.isFinite(p.timestamp) && Number.isFinite(p.close_price));
-});
-
-export function getHourlyPrices(stockId, options) {
-  return hourlyPricesCache.get(Number(stockId), options);
-}
-
 const pricesCache = createCache(async (stockId) => {
   const res = await api.get(`/stocks/${stockId}/prices`);
   return normalizeList(unwrap(res), normalizePrice).filter((p) => p.price_date && p.close_price !== null);

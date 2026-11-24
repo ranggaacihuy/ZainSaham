@@ -86,6 +86,7 @@ func parseNews(ticker string, raw []byte, limit int) ([]models.News, error) {
 		return nil, fmt.Errorf("berita %s gagal dibaca: %w", ticker, err)
 	}
 
+	tickerWord := regexp.MustCompile(`\b` + regexp.QuoteMeta(ticker) + `\b`)
 	seen := map[string]bool{}
 	var items []models.News
 
@@ -99,7 +100,10 @@ func parseNews(ticker string, raw []byte, limit int) ([]models.News, error) {
 			continue
 		}
 
-		if !strings.Contains(strings.ToUpper(title+" "+description), ticker) {
+		// Kode saham ditulis kapital di berita. Pencocokan peka huruf besar dan
+		// utuh per kata supaya kata biasa (misalnya "bumi" untuk BUMI) atau
+		// kata yang lebih panjang tidak ikut lolos.
+		if !tickerWord.MatchString(title + " " + description) {
 			continue
 		}
 

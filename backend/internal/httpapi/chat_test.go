@@ -113,17 +113,40 @@ func TestChatSendsOnlyRecentHistory(t *testing.T) {
 	}
 }
 
-func TestChatMissingKeyReturns502WithSessionID(t *testing.T) {
+func TestChatFailureStoresNothing(t *testing.T) {
 	f := newChatFixture(t)
 	f.withGeminiKey("")
 
-	res := f.send("Halo", nil).
+	f.send("Halo", nil).
 		assertStatus(http.StatusBadGateway).
-		assertPath("message", "Layanan AI belum dikonfigurasi. Isi GEMINI_API_KEY di file .env backend.")
+		assertPath("message", "Layanan AI belum dikonfigurasi. Isi GEMINI_API_KEY di file .env backend.").
+		assertMissing("data")
 
-	if res.get("data.session_id") == nil {
-		t.Fatalf("session_id harus dikirim: %s", res.raw)
+	var sessions, messages int64
+	f.db.Model(&models.AnalysisSession{}).Count(&sessions)
+	f.db.Model(&models.AiMessage{}).Count(&messages)
+	if sessions != 0 || messages != 0 {
+		t.Fatalf("chat gagal tidak boleh menyimpan apa pun: %d sesi, %d pesan", sessions, messages)
 	}
+}
+
+func TestChatRetryAfterFailureDoesNotDuplicateMessage(t *testing.T) {
+	f := newChatFixture(t)
+	f.gemini.set(geminiReply("Jawaban pertama."))
+
+	sessionID := f.send("Pertanyaan pertama", nil).assertStatus(http.StatusOK).get("data.session_id")
+
+	f.gemini.set(func(path string, w http.ResponseWriter) { w.WriteHeader(http.StatusServiceUnavailable) })
+	f.send("Pertanyaan kedua", sessionID).assertStatus(http.StatusBadGateway)
+
+	f.gemini.set(geminiReply("Jawaban kedua."))
+	f.send("Pertanyaan kedua", sessionID).assertStatus(http.StatusOK)
+
+	f.call(http.MethodGet, fmt.Sprintf("/api/ai-chat/%v/messages", sessionID), f.token, nil).
+		assertStatus(http.StatusOK).
+		assertCount("data", 4).
+		assertPath("data.2.content", "Pertanyaan kedua").
+		assertPath("data.3.content", "Jawaban kedua.")
 }
 
 func TestChatBlockedReplyReturnsFriendlyMessage(t *testing.T) {

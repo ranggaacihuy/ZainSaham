@@ -24,6 +24,7 @@ type App struct {
 	Port             string
 	CORSOrigins      []string
 	BcryptCost       int
+	TokenTTL         time.Duration
 	SchedulerEnabled bool
 }
 
@@ -77,6 +78,7 @@ func Load() Config {
 			Port:             str("APP_PORT", "8000"),
 			CORSOrigins:      list("CORS_ALLOWED_ORIGINS", "http://localhost:3000"),
 			BcryptCost:       integer("BCRYPT_COST", 12),
+			TokenTTL:         time.Duration(integer("TOKEN_TTL_DAYS", 30)) * 24 * time.Hour,
 			SchedulerEnabled: boolean("SCHEDULER_ENABLED", true),
 		},
 		Database: Database{

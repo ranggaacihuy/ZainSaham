@@ -40,7 +40,8 @@ func CheckPassword(hash, password string) bool {
 	return bcrypt.CompareHashAndPassword([]byte(hash), []byte(password)) == nil
 }
 
-func IssueToken(db *gorm.DB, user *models.User) (string, error) {
+// IssueToken membuat token baru. ttl <= 0 berarti token tidak kedaluwarsa.
+func IssueToken(db *gorm.DB, user *models.User, ttl time.Duration) (string, error) {
 	plain := rand.Text() + rand.Text()
 
 	token := models.PersonalAccessToken{
@@ -48,6 +49,9 @@ func IssueToken(db *gorm.DB, user *models.User) (string, error) {
 		TokenableID:   user.UserID,
 		Name:          tokenName,
 		Token:         digest(plain),
+	}
+	if ttl > 0 {
+		token.ExpiresAt = new(time.Now().UTC().Add(ttl))
 	}
 
 	if err := db.Create(&token).Error; err != nil {
@@ -100,6 +104,12 @@ func digest(plain string) string {
 	sum := sha256.Sum256([]byte(plain))
 
 	return hex.EncodeToString(sum[:])
+}
+
+// RevokeOthers mencabut semua token pengguna kecuali token dengan ID keepID.
+func RevokeOthers(db *gorm.DB, userID, keepID uint) error {
+	return db.Where("tokenable_type = ? AND tokenable_id = ? AND id <> ?", tokenableType, userID, keepID).
+		Delete(&models.PersonalAccessToken{}).Error
 }
 
 func RevokeAll(db *gorm.DB, userID uint) error {

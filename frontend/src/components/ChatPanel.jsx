@@ -26,10 +26,13 @@ export default function ChatPanel({ stock, userId, initialSessionId, onSessionCh
   const [sending, setSending] = useState(false);
   const listRef = useRef(null);
   const sessionRef = useRef(sessionId);
+  // Sesi yang dibuat panel ini sendiri (dikembalikan parent lewat URL).
+  const ownSessionRef = useRef(null);
   const textareaRef = useRef(null);
 
   const updateSession = (id) => {
     sessionRef.current = id;
+    ownSessionRef.current = id;
     setSessionId(id);
     onSessionChange?.(id);
   };
@@ -45,8 +48,15 @@ export default function ChatPanel({ stock, userId, initialSessionId, onSessionCh
     }
   };
 
+  // initialSessionId berubah karena dua hal: panel ini membuat sesi baru (parent
+  // menaruhnya di URL), atau sesi lain dipilih dari luar. Hanya yang kedua yang
+  // perlu memuat riwayat; memuat ulang sesi sendiri akan menimpa status pesan
+  // lokal seperti pesan gagal dan tombol "Kirim ulang".
   useEffect(() => {
-    if (!initialSessionId) return undefined;
+    if (!initialSessionId || initialSessionId === ownSessionRef.current) return undefined;
+    sessionRef.current = initialSessionId;
+    setSessionId(initialSessionId);
+    setHistory({ loading: true, error: null });
     let active = true;
     chatMessages(initialSessionId).then(
       (list) => {
@@ -82,7 +92,6 @@ export default function ChatPanel({ stock, userId, initialSessionId, onSessionCh
         toBubble(res.assistant_message),
       ]);
     } catch (error) {
-      if (error.data?.session_id) updateSession(Number(error.data.session_id));
       if (error.status === 403) updateSession(null);
       const message = fieldError(error, 'message') || error.message;
       setMessages((prev) => prev.map((m) => (m.key === key ? { ...m, status: 'error', error: message } : m)));

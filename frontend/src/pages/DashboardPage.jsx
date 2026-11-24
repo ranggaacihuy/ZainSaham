@@ -264,9 +264,14 @@ function MoversList({ title, items }) {
   );
 }
 
+function moversDescription(data) {
+  if (!data?.moversDate) return 'Perubahan harga dibanding hari bursa sebelumnya';
+  return `${number(data.moversTotal, 0)} emiten yang dipantau · ${date(data.moversDate)} dibanding hari bursa sebelumnya`;
+}
+
 function MoversCard({ dashboard }) {
   return (
-    <Card title="Top gainers & losers" description="Perubahan dari dua hari bursa terakhir">
+    <Card title="Top gainers & losers" description={moversDescription(dashboard.data)}>
       {dashboard.loading ? (
         <div className="grid gap-6 sm:grid-cols-2">
           <SkeletonText lines={5} />
@@ -369,7 +374,7 @@ export default function DashboardPage() {
         </StatCard>
 
         <StatCard
-          label="Rata-rata perubahan hari ini"
+          label={stats?.date ? `Rata-rata perubahan · ${date(stats.date)}` : 'Rata-rata perubahan'}
           icon={Activity}
           iconTone={
             avgTone === 'up'

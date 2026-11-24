@@ -53,6 +53,7 @@ func TestStockEndpointsShape(t *testing.T) {
 func TestQuoteReturnsLiveCandleAndStoresIt(t *testing.T) {
 	e := newEnv(t)
 	stock := testutil.Stock(t, e.db, "BBCA")
+	token := testutil.Token(t, e.db, testutil.User(t, e.db, "budi@example.test"))
 
 	now := time.Now().UTC()
 	open := now.Add(-time.Hour)
@@ -86,7 +87,7 @@ func TestQuoteReturnsLiveCandleAndStoresIt(t *testing.T) {
 		}})
 	})
 
-	res := e.call(http.MethodGet, "/api/stocks/"+itoa(stock.StockID)+"/quote", "", nil).
+	res := e.call(http.MethodGet, "/api/stocks/"+itoa(stock.StockID)+"/quote", token, nil).
 		assertStatus(http.StatusOK).
 		assertPath("data.is_open", true).
 		assertPath("data.price.close_price", 5200).
@@ -104,7 +105,7 @@ func TestQuoteReturnsLiveCandleAndStoresIt(t *testing.T) {
 		t.Fatalf("query = %s", e.yahoo.last().query)
 	}
 
-	e.call(http.MethodGet, "/api/stocks/"+itoa(stock.StockID)+"/quote", "", nil).assertStatus(http.StatusOK)
+	e.call(http.MethodGet, "/api/stocks/"+itoa(stock.StockID)+"/quote", token, nil).assertStatus(http.StatusOK)
 	if e.yahoo.count("BBCA.JK") != 1 {
 		t.Fatalf("quote harus di-cache, requests = %d", e.yahoo.count("BBCA.JK"))
 	}
@@ -119,15 +120,16 @@ func TestQuoteReturnsLiveCandleAndStoresIt(t *testing.T) {
 func TestQuoteErrors(t *testing.T) {
 	e := newEnv(t)
 	stock := testutil.Stock(t, e.db, "BBCA")
+	token := testutil.Token(t, e.db, testutil.User(t, e.db, "budi@example.test"))
 
 	e.yahoo.set(func(path string, w http.ResponseWriter) { w.WriteHeader(http.StatusBadRequest) })
 
-	e.call(http.MethodGet, "/api/stocks/"+itoa(stock.StockID)+"/quote", "", nil).
+	e.call(http.MethodGet, "/api/stocks/"+itoa(stock.StockID)+"/quote", token, nil).
 		assertStatus(http.StatusBadGateway).
 		assertPath("success", false).
 		assertPath("message", "Data harga realtime belum dapat diambil dari Yahoo Finance.")
 
-	e.call(http.MethodGet, "/api/stocks/999/quote", "", nil).assertStatus(http.StatusNotFound)
+	e.call(http.MethodGet, "/api/stocks/999/quote", token, nil).assertStatus(http.StatusNotFound)
 }
 
 func TestIntradayRequiresAuthValidatesAndSanitizesErrors(t *testing.T) {

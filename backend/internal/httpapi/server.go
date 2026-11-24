@@ -3,6 +3,7 @@ package httpapi
 import (
 	"log"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -18,6 +19,10 @@ type Server struct {
 	market          *market.Service
 	analysis        *analysis.Service
 	intradayLimiter *rateLimiter
+	quoteLimiter    *rateLimiter
+	loginLimiter    *rateLimiter
+	dummyHashOnce   sync.Once
+	dummyHash       string
 }
 
 func NewServer(db *gorm.DB, cfg config.App, marketService *market.Service, analysisService *analysis.Service) *Server {
@@ -29,6 +34,8 @@ func NewServer(db *gorm.DB, cfg config.App, marketService *market.Service, analy
 		market:          marketService,
 		analysis:        analysisService,
 		intradayLimiter: newRateLimiter(45, time.Minute),
+		quoteLimiter:    newRateLimiter(60, time.Minute),
+		loginLimiter:    newRateLimiter(loginMaxFailures, loginLockout),
 	}
 }
 
@@ -59,14 +66,14 @@ func (s *Server) Router() *gin.Engine {
 	api.GET("/stocks", s.listStocks)
 	api.GET("/stocks/:stockId", s.showStock)
 	api.GET("/stocks/:stockId/prices", s.stockPrices)
-	api.GET("/stocks/:stockId/quote", s.stockQuote)
 	api.GET("/stocks/:stockId/indicators", s.stockIndicators)
 	api.GET("/stocks/:stockId/fundamentals", s.stockFundamentals)
 	api.GET("/stocks/:stockId/news", s.stockNews)
 	api.GET("/news", s.newsFeed)
 
 	private := api.Group("", s.requireAuth)
-	private.GET("/stocks/:stockId/intraday", s.rateLimitIntraday, s.stockIntraday)
+	private.GET("/stocks/:stockId/quote", rateLimit(s.quoteLimiter, "Terlalu banyak permintaan harga realtime. Coba lagi sebentar."), s.stockQuote)
+	private.GET("/stocks/:stockId/intraday", rateLimit(s.intradayLimiter, "Terlalu banyak permintaan data intraday. Coba lagi sebentar."), s.stockIntraday)
 	private.GET("/me", s.me)
 	private.POST("/logout", s.logout)
 	private.PUT("/profile", s.updateProfile)

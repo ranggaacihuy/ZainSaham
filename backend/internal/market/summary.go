@@ -23,6 +23,7 @@ type Summary struct {
 type SummaryOptions struct {
 	Sparkline int
 	RSI       bool
+	AsOf      *models.Date
 }
 
 func (s *Service) Summaries(stockIDs []uint, opts SummaryOptions) (map[uint]*Summary, error) {
@@ -41,16 +42,23 @@ func (s *Service) Summaries(stockIDs []uint, opts SummaryOptions) (map[uint]*Sum
 		Volume     int64
 	}
 
+	where, args := "stock_id IN ?", []any{stockIDs}
+	if opts.AsOf != nil {
+		where += " AND price_date <= ?"
+		args = append(args, *opts.AsOf)
+	}
+	args = append(args, max(2, opts.Sparkline))
+
 	err := s.db.Raw(`
 		SELECT stock_id, price_date, open_price, high_price, low_price, close_price, volume
 		FROM (
 			SELECT stock_id, price_date, open_price, high_price, low_price, close_price, volume,
 				ROW_NUMBER() OVER (PARTITION BY stock_id ORDER BY price_date DESC) AS row_num
 			FROM stock_prices
-			WHERE stock_id IN ?
+			WHERE `+where+`
 		) ranked
 		WHERE row_num <= ?
-		ORDER BY stock_id, price_date`, stockIDs, max(2, opts.Sparkline)).Scan(&rows).Error
+		ORDER BY stock_id, price_date`, args...).Scan(&rows).Error
 	if err != nil {
 		return nil, err
 	}

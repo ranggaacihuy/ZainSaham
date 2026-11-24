@@ -97,9 +97,24 @@ api.interceptors.request.use((reqConfig) => {
   return reqConfig;
 });
 
+let unauthorizedHandler = null;
+
+// Dipanggil saat permintaan yang membawa token ditolak 401 (token dicabut atau
+// kedaluwarsa), supaya aplikasi bisa mengakhiri sesi dan kembali ke halaman login.
+export function setUnauthorizedHandler(handler) {
+  unauthorizedHandler = handler;
+}
+
 api.interceptors.response.use(
   (response) => response,
-  (error) => Promise.reject(toApiError(error)),
+  (error) => {
+    const apiError = toApiError(error);
+    const sentToken = Boolean(error?.config?.headers?.Authorization);
+    if (apiError.status === 401 && sentToken && unauthorizedHandler) {
+      unauthorizedHandler(apiError);
+    }
+    return Promise.reject(apiError);
+  },
 );
 
 export function unwrap(response) {

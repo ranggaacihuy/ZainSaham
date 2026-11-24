@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { deleteAccountApi, loginApi, logoutApi, meApi, registerApi, updateProfileApi } from '../api/auth';
-import { getAuthToken, setAuthToken } from '../api/client';
+import { getAuthToken, setAuthToken, setUnauthorizedHandler } from '../api/client';
 import { normalizeUser } from '../api/normalize';
 
 const AuthContext = createContext(null);
@@ -40,6 +40,11 @@ export function AuthProvider({ children }) {
     writeStoredUser(null);
     setUser(null);
   }, []);
+
+  useEffect(() => {
+    setUnauthorizedHandler(() => clearSession());
+    return () => setUnauthorizedHandler(null);
+  }, [clearSession]);
 
   useEffect(() => {
     const token = getAuthToken();

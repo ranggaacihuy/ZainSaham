@@ -41,7 +41,8 @@ func Open(cfg config.Database) (*gorm.DB, error) {
 			LogLevel:                  logger.Warn,
 			IgnoreRecordNotFoundError: true,
 		}),
-		NowFunc: func() time.Time { return time.Now().UTC() },
+		NowFunc:        func() time.Time { return time.Now().UTC() },
+		TranslateError: true,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("gagal membuka database: %w", err)
