@@ -12,7 +12,7 @@ import WatchlistButton from '../components/WatchlistButton';
 import useAsync from '../hooks/useAsync';
 import useLiveQuote from '../hooks/useLiveQuote';
 import { getByTicker, loadStocks } from '../lib/stocksStore';
-import { getFundamentals, getHourlyPrices, getIndicators, getNews, getPrices } from '../api/stocks';
+import { getFundamentals, getIndicators, getNews, getPrices } from '../api/stocks';
 import { classifyPeriods, describeIndicators, summarizePrices } from '../lib/market';
 import { compact, date, dateTime, idr, number, pct, signed, toneOf } from '../lib/format';
 
@@ -133,33 +133,23 @@ function PriceHeader({ stock, prices, live }) {
   );
 }
 
-function ChartTab({ stock, prices, timeframe, onTimeframeChange }) {
-  const isHourly = timeframe === '1J';
-  const hourly = useAsync(
-    (opts) => getHourlyPrices(stock.stock_id, opts),
-    [stock.stock_id],
-    { enabled: isHourly },
-  );
-
-  const activeState = isHourly ? hourly : prices;
-
-  if (activeState.loading) return <Skeleton className="h-100 rounded-cards" />;
-  if (activeState.error) return <Card><ErrorState error={activeState.error} onRetry={activeState.reload} /></Card>;
-  if (!activeState.data?.length) return <Card><EmptyState message="Data harga belum tersedia untuk saham ini." /></Card>;
+function ChartTab({ stock, prices }) {
+  if (prices.loading) return <Skeleton className="h-100 rounded-cards" />;
+  if (prices.error) return <Card><ErrorState error={prices.error} onRetry={prices.reload} /></Card>;
+  if (!prices.data?.length) return <Card><EmptyState message="Data harga belum tersedia untuk saham ini." /></Card>;
 
   return (
     <StockChart
       key={stock.stock_id}
+      stockId={stock.stock_id}
       ticker={stock.ticker}
-      prices={activeState.data}
-      timeframe={timeframe}
-      onTimeframeChange={onTimeframeChange}
+      prices={prices.data}
       index={isIndex(stock)}
     />
   );
 }
 
-function TechnicalTab({ stock, prices, timeframe, onTimeframeChange }) {
+function TechnicalTab({ stock, prices }) {
   const indicators = useAsync((opts) => getIndicators(stock.stock_id, opts), [stock.stock_id]);
   const description = useMemo(() => {
     const list = indicators.data || [];
@@ -188,8 +178,6 @@ function TechnicalTab({ stock, prices, timeframe, onTimeframeChange }) {
       key={stock.stock_id}
       prices={prices.data}
       description={description}
-      timeframe={timeframe}
-      onTimeframeChange={onTimeframeChange}
       index={isIndex(stock)}
     />
   );
@@ -262,7 +250,6 @@ function NewsTab({ stock }) {
 export default function StockDetailPage() {
   const { ticker } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [timeframe, setTimeframe] = useState('1H');
 
   const stockState = useAsync(
     async (opts) => {
@@ -342,8 +329,8 @@ export default function StockDetailPage() {
       <Tabs items={tabs} value={tab} onChange={setTab} label="Bagian detail saham" className="mb-4" />
 
       <div role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`}>
-        {tab === 'grafik' && <ChartTab stock={stock} prices={prices} timeframe={timeframe} onTimeframeChange={setTimeframe} />}
-        {tab === 'teknikal' && <TechnicalTab stock={stock} prices={prices} timeframe={timeframe} onTimeframeChange={setTimeframe} />}
+        {tab === 'grafik' && <ChartTab stock={stock} prices={prices} />}
+        {tab === 'teknikal' && <TechnicalTab stock={stock} prices={prices} />}
         {tab === 'fundamental' && <FundamentalTab stockId={stock.stock_id} />}
         {tab === 'berita' && <NewsTab stock={stock} />}
       </div>

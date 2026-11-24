@@ -20,45 +20,103 @@ export function summarizePrices(prices) {
   };
 }
 
-function weekStart(dateKey) {
-  const [y, m, d] = dateKey.split('-').map(Number);
-  const date = new Date(Date.UTC(y, m - 1, d));
-  date.setUTCDate(date.getUTCDate() - ((date.getUTCDay() + 6) % 7));
-  return date.toISOString().slice(0, 10);
+function shiftDate(dateKey, { days = 0, months = 0, years = 0 }) {
+  const [y, m, d] = String(dateKey).slice(0, 10).split('-').map(Number);
+  const dt = new Date(Date.UTC(y - years, m - 1 - months, d - days));
+  return dt.toISOString().slice(0, 10);
 }
 
-function monthBucket(months) {
-  return (dateKey) => {
-    const [y, m] = dateKey.split('-').map(Number);
-    return `${y}-${Math.floor((m - 1) / months)}`;
-  };
+function weekStart(dateKey) {
+  const [y, m, d] = String(dateKey).slice(0, 10).split('-').map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  dt.setUTCDate(dt.getUTCDate() - ((dt.getUTCDay() + 6) % 7));
+  return dt.toISOString().slice(0, 10);
 }
 
 export const TIMEFRAMES = [
-  { value: '1J', label: '1J', title: '1 jam', intraday: true },
-  { value: '1H', label: '1H', title: '1 hari', bucket: (dateKey) => dateKey },
-  { value: '1Mg', label: '1Mg', title: '1 minggu', bucket: weekStart },
-  { value: '1B', label: '1B', title: '1 bulan', bucket: monthBucket(1) },
-  { value: '3B', label: '3B', title: '3 bulan', bucket: monthBucket(3) },
-  { value: '6B', label: '6B', title: '6 bulan', bucket: monthBucket(6) },
-  { value: '1T', label: '1T', title: '1 tahun', bucket: monthBucket(12) },
+  { value: '1H', label: '1H', title: '1 hari', shift: { days: 0 } },
+  { value: '1Mg', label: '1Mg', title: '1 minggu', shift: { days: 7 }, minBars: 5 },
+  { value: '1B', label: '1B', title: '1 bulan', shift: { days: 30 } },
+  { value: '3B', label: '3B', title: '3 bulan', shift: { months: 3 } },
+  { value: '6B', label: '6B', title: '6 bulan', shift: { months: 6 } },
+  { value: '1T', label: '1T', title: '1 tahun', shift: { years: 1 } },
 ];
 
-export function aggregatePrices(prices, timeframe) {
-  if (!Array.isArray(prices)) return [];
-  const option = TIMEFRAMES.find((t) => t.value === timeframe) || TIMEFRAMES[1];
-  if (option.intraday || option.value === '1H') return prices;
+export const INTERVAL_GROUPS = [
+  {
+    id: 'minutes',
+    label: 'MENIT',
+    items: [
+      { value: '1m', short: '1m', label: '1 menit', intraday: true, rangeNote: '5 hari terakhir' },
+      { value: '5m', short: '5m', label: '5 menit', intraday: true, rangeNote: '1 bulan terakhir' },
+      { value: '10m', short: '10m', label: '10 menit', intraday: true, rangeNote: '1 bulan terakhir' },
+      { value: '15m', short: '15m', label: '15 menit', intraday: true, rangeNote: '1 bulan terakhir' },
+    ],
+  },
+  {
+    id: 'hours',
+    label: 'JAM',
+    items: [
+      { value: '1h', short: '1j', label: '1 jam', intraday: true, rangeNote: '3 bulan terakhir' },
+      { value: '2h', short: '2j', label: '2 jam', intraday: true, rangeNote: '3 bulan terakhir' },
+      { value: '4h', short: '4j', label: '4 jam', intraday: true, rangeNote: '3 bulan terakhir' },
+    ],
+  },
+  {
+    id: 'days',
+    label: 'HARI',
+    items: [
+      { value: '1d', short: '1H', label: '1 hari', intraday: false },
+      { value: '1w', short: '1Mg', label: '1 minggu', intraday: false },
+      { value: '1mo', short: '1B', label: '1 bulan', intraday: false },
+    ],
+  },
+];
 
+const ALL_INTERVALS = INTERVAL_GROUPS.flatMap((g) => g.items);
+
+export function getIntervalMeta(value) {
+  return ALL_INTERVALS.find((item) => item.value === value) || ALL_INTERVALS.find((item) => item.value === '1d');
+}
+
+export function filterByTimeframe(items, timeframe, dateField = 'price_date') {
+  if (!Array.isArray(items) || items.length === 0) return [];
+  const option = TIMEFRAMES.find((t) => t.value === timeframe) || TIMEFRAMES[0];
+  const lastDate = String(items[items.length - 1][dateField]).slice(0, 10);
+
+  if (option.value === '1H') {
+    const sameDay = items.filter((item) => String(item[dateField]).slice(0, 10) === lastDate);
+    return sameDay.length > 0 ? sameDay : items.slice(-1);
+  }
+
+  const startDate = shiftDate(lastDate, option.shift);
+  const filtered = items.filter((item) => String(item[dateField]).slice(0, 10) >= startDate);
+  if (option.minBars && filtered.length < option.minBars) {
+    return items.slice(-option.minBars);
+  }
+  return filtered.length > 0 ? filtered : items.slice(-1);
+}
+
+export function aggregatePrices(prices, timeframe) {
+  return filterByTimeframe(prices, timeframe, 'price_date');
+}
+
+export function aggregateByInterval(prices, interval) {
+  if (!Array.isArray(prices) || prices.length === 0) return [];
+  if (interval !== '1w' && interval !== '1mo') return prices;
+
+  const bucketOf = interval === '1w' ? weekStart : (dateKey) => String(dateKey).slice(0, 7);
   const bars = [];
-  let key = null;
+  let currentKey = null;
+
   prices.forEach((p) => {
     const open = p.open_price ?? p.close_price;
     const high = p.high_price ?? Math.max(open, p.close_price);
     const low = p.low_price ?? Math.min(open, p.close_price);
-    const bucket = option.bucket(p.price_date);
+    const bucket = bucketOf(p.price_date);
 
-    if (bucket !== key) {
-      key = bucket;
+    if (bucket !== currentKey) {
+      currentKey = bucket;
       bars.push({
         price_date: p.price_date,
         open_price: open,
@@ -76,6 +134,7 @@ export function aggregatePrices(prices, timeframe) {
     bar.close_price = p.close_price;
     bar.volume += p.volume ?? 0;
   });
+
   return bars;
 }
 

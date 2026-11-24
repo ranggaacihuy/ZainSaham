@@ -1,5 +1,5 @@
 import { ColorType, CrosshairMode, LineStyle, createChart } from 'lightweight-charts';
-import { compact, date, dateTime, number } from './format';
+import { compact, date, intradayDateTime, intradayTick, number } from './format';
 
 function token(name) {
   return getComputedStyle(document.documentElement).getPropertyValue(`--color-${name}`).trim();
@@ -58,37 +58,44 @@ export function createThemedChart(container, colors) {
   return createChart(container, {
     autoSize: true,
     ...chartThemeOptions(colors),
-    localization: {
-      locale: 'id-ID',
-      timeFormatter: (time) => (typeof time === 'number' ? dateTime(new Date(time * 1000)) : date(timeKey(time))),
-    },
     rightPriceScale: { borderVisible: false, minimumWidth: 64 },
     timeScale: {
       borderVisible: false,
       rightOffset: 0,
       minBarSpacing: 0.5,
-      maxBarSpacing: 40,
+      maxBarSpacing: 160,
       fixLeftEdge: true,
       fixRightEdge: true,
       lockVisibleTimeRangeOnResize: true,
     },
     handleScroll: { vertTouchDrag: false },
-    localization: { locale: 'id-ID', timeFormatter: (time) => date(timeKey(time)) },
+    localization: {
+      locale: 'id-ID',
+      timeFormatter: (time) => (typeof time === 'number' ? intradayDateTime(time) : date(timeKey(time))),
+    },
   });
 }
 
-const VISIBLE_BARS = 120;
+export function configureTimeScale(chart, isIntraday) {
+  chart.timeScale().applyOptions({
+    timeVisible: isIntraday,
+    secondsVisible: false,
+    tickMarkFormatter: isIntraday ? (time, tickMarkType) => intradayTick(time, tickMarkType) : undefined,
+  });
+}
+
+const VISIBLE_BARS = 100;
 
 export function showLatest(chart, count) {
   const timeScale = chart.timeScale();
-  if (!count || count <= VISIBLE_BARS) {
-    timeScale.fitContent();
+  if (count > VISIBLE_BARS) {
+    timeScale.setVisibleLogicalRange({
+      from: count - VISIBLE_BARS,
+      to: count - 0.5 + timeScale.options().rightOffset,
+    });
     return;
   }
-  timeScale.setVisibleLogicalRange({
-    from: count - VISIBLE_BARS,
-    to: count - 0.5 + timeScale.options().rightOffset,
-  });
+  timeScale.fitContent();
 }
 
 export function continuesSeries(previous, next, dateField) {

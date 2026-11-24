@@ -364,3 +364,71 @@ func TestSyncAllContinuesWhenOneStockFails(t *testing.T) {
 		t.Fatalf("output = %s", out.String())
 	}
 }
+
+func TestIntradayFetchesAggregatesAndCaches(t *testing.T) {
+	loc, _ := time.LoadLocation("Asia/Jakarta")
+	base := time.Date(2026, 11, 20, 9, 0, 0, 0, loc)
+	timestamps := []int64{
+		base.Unix(),
+		base.Add(5 * time.Minute).Unix(),
+		base.Add(10 * time.Minute).Unix(),
+		base.Add(15 * time.Minute).Unix(),
+	}
+
+	fake, baseURL := newFakeYahoo(t, func(symbol string, w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, map[string]any{"chart": map[string]any{
+			"result": []any{map[string]any{
+				"meta": map[string]any{
+					"symbol":               "BBCA.JK",
+					"currency":             "IDR",
+					"exchangeTimezoneName": "Asia/Jakarta",
+				},
+				"timestamp": timestamps,
+				"indicators": map[string]any{"quote": []any{map[string]any{
+					"open":   []any{9000.0, 9025.0, 9050.0, 9075.0},
+					"high":   []any{9050.0, 9075.0, 9100.0, 9125.0},
+					"low":    []any{8975.0, 9000.0, 9025.0, 9050.0},
+					"close":  []any{9025.0, 9050.0, 9075.0, 9100.0},
+					"volume": []any{1000.0, 2000.0, 1500.0, 2500.0},
+				}}},
+			}},
+			"error": nil,
+		}})
+	})
+
+	service, db := newTestService(t, baseURL)
+	stock := createStock(t, db, "BBCA")
+
+	clock := base.Add(time.Hour)
+	service.now = func() time.Time { return clock }
+
+	if _, err := service.Intraday(context.Background(), stock, "7m"); err == nil {
+		t.Fatal("interval tidak valid seharusnya error")
+	}
+
+	res, err := service.Intraday(context.Background(), stock, "10m")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if res.Interval != "10m" || len(res.Candles) != 2 {
+		t.Fatalf("intraday 10m = %+v", res)
+	}
+	if res.Candles[0].OpenPrice != 9000 || res.Candles[0].HighPrice != 9075 || res.Candles[0].LowPrice != 8975 || res.Candles[0].ClosePrice != 9050 || res.Candles[0].Volume != 3000 {
+		t.Fatalf("candle pertama 10m = %+v", res.Candles[0])
+	}
+	if res.Candles[1].OpenPrice != 9050 || res.Candles[1].HighPrice != 9125 || res.Candles[1].LowPrice != 9025 || res.Candles[1].ClosePrice != 9100 || res.Candles[1].Volume != 4000 {
+		t.Fatalf("candle kedua 10m = %+v", res.Candles[1])
+	}
+
+	_, _ = service.Intraday(context.Background(), stock, "10m")
+	if fake.count("BBCA.JK") != 1 {
+		t.Fatalf("intraday harus di-cache, requests = %d", fake.count("BBCA.JK"))
+	}
+
+	clock = clock.Add(61 * time.Second)
+	_, _ = service.Intraday(context.Background(), stock, "10m")
+	if fake.count("BBCA.JK") != 2 {
+		t.Fatalf("cache intraday harus kedaluwarsa, requests = %d", fake.count("BBCA.JK"))
+	}
+}

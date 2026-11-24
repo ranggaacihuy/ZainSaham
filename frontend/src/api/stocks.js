@@ -2,6 +2,7 @@ import api, { unwrap } from './client';
 import {
   normalizeFundamental,
   normalizeIndicator,
+  normalizeIntradayCandle,
   normalizeList,
   normalizeNews,
   normalizePrice,
@@ -72,6 +73,41 @@ const newsCache = createCache(async (stockId) => {
 
 export function getPrices(stockId, options) {
   return pricesCache.get(Number(stockId), options);
+}
+
+const intradayCache = new Map();
+const INTRADAY_TTL_MS = {
+  '1m': 30 * 1000,
+  '5m': 60 * 1000,
+  '10m': 60 * 1000,
+  '15m': 60 * 1000,
+  '1h': 5 * 60 * 1000,
+  '2h': 5 * 60 * 1000,
+  '4h': 5 * 60 * 1000,
+};
+
+export async function getIntradayPrices(stockId, interval, { force = false } = {}) {
+  const key = `${Number(stockId)}:${interval}`;
+  const now = Date.now();
+  const cached = intradayCache.get(key);
+  if (!force && cached && now < cached.expires) {
+    return cached.data;
+  }
+
+  const res = await api.get(`/stocks/${Number(stockId)}/intraday`, { params: { interval } });
+  const raw = unwrap(res);
+  const data = {
+    interval: raw?.interval || interval,
+    range: raw?.range || '',
+    timezone: raw?.timezone || 'Asia/Jakarta',
+    candles: normalizeList(raw?.candles, normalizeIntradayCandle).filter(
+      (c) => c.timestamp !== null && c.close_price !== null,
+    ),
+  };
+
+  const ttl = INTRADAY_TTL_MS[interval] || 60 * 1000;
+  intradayCache.set(key, { data, expires: now + ttl });
+  return data;
 }
 
 export async function getQuote(stockId) {

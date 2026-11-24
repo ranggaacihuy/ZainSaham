@@ -78,6 +78,18 @@ export function normalizePrice(raw) {
   };
 }
 
+export function normalizeIntradayCandle(raw) {
+  return {
+    timestamp: toNumber(raw.timestamp),
+    price_date: raw.price_date ?? null,
+    open_price: toNumber(raw.open_price),
+    high_price: toNumber(raw.high_price),
+    low_price: toNumber(raw.low_price),
+    close_price: toNumber(raw.close_price),
+    volume: toNumber(raw.volume),
+  };
+}
+
 export function normalizeIndicator(raw) {
   return {
     indicator_date: toDateKey(raw.indicator_date),

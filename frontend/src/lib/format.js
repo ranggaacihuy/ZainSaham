@@ -79,6 +79,26 @@ const dateTimeFmt = new Intl.DateTimeFormat('id-ID', {
   hour: '2-digit',
   minute: '2-digit',
 });
+const intradayDateTimeFmt = new Intl.DateTimeFormat('id-ID', {
+  timeZone: 'Asia/Jakarta',
+  day: 'numeric',
+  month: 'short',
+  year: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
+  hour12: false,
+});
+const intradayTimeFmt = new Intl.DateTimeFormat('id-ID', {
+  timeZone: 'Asia/Jakarta',
+  hour: '2-digit',
+  minute: '2-digit',
+  hour12: false,
+});
+const intradayDayFmt = new Intl.DateTimeFormat('id-ID', {
+  timeZone: 'Asia/Jakarta',
+  day: 'numeric',
+  month: 'short',
+});
 
 export function date(value) {
   const d = parseDate(value);
@@ -88,6 +108,19 @@ export function date(value) {
 export function dateTime(value) {
   const d = parseDate(value);
   return d ? dateTimeFmt.format(d) : DASH;
+}
+
+export function intradayDateTime(unixSeconds) {
+  if (!isNum(unixSeconds)) return DASH;
+  return `${intradayDateTimeFmt.format(new Date(unixSeconds * 1000))} WIB`;
+}
+
+export function intradayTick(unixSeconds, tickMarkType) {
+  if (!isNum(unixSeconds)) return '';
+  const d = new Date(unixSeconds * 1000);
+  if (tickMarkType === 0) return String(d.getUTCFullYear());
+  if (tickMarkType === 1 || tickMarkType === 2) return intradayDayFmt.format(d);
+  return intradayTimeFmt.format(d);
 }
 
 export function toneOf(value) {

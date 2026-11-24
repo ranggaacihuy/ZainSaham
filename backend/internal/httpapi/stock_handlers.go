@@ -315,6 +315,37 @@ func (s *Server) stockQuote(c *gin.Context) {
 	ok(c, quote)
 }
 
+func (s *Server) stockIntraday(c *gin.Context) {
+	id, valid := idParam(c, "stockId", stockNotFound)
+	if !valid {
+		return
+	}
+
+	interval := strings.ToLower(strings.TrimSpace(c.DefaultQuery("interval", "5m")))
+	if _, ok := market.LookupIntradaySpec(interval); !ok {
+		validationError(c, "interval", "Interval tidak valid. Pilih 1m, 5m, 10m, 15m, 1h, 2h, atau 4h.")
+		return
+	}
+
+	stock, found := s.findStock(c, id)
+	if !found {
+		return
+	}
+
+	data, err := s.market.Intraday(c.Request.Context(), stock, interval)
+	if err != nil {
+		if errors.Is(err, market.ErrInvalidInterval) {
+			validationError(c, "interval", "Interval tidak valid. Pilih 1m, 5m, 10m, 15m, 1h, 2h, atau 4h.")
+			return
+		}
+		log.Printf("intraday %s (%s): %v", stock.Ticker, interval, err)
+		fail(c, http.StatusBadGateway, "Data candlestick intraday belum dapat diambil dari Yahoo Finance.")
+		return
+	}
+
+	ok(c, data)
+}
+
 func queryInt(c *gin.Context, key string, fallback int) int {
 	value, err := strconv.Atoi(c.Query(key))
 	if err != nil {

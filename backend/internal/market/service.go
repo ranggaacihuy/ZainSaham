@@ -2,6 +2,7 @@ package market
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -18,7 +19,26 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-const indicatorWindow = 200
+const (
+	indicatorWindow         = 200
+	maxIntradayCacheEntries = 200
+)
+
+var ErrInvalidInterval = errors.New("interval tidak valid")
+
+type IntradayResponse struct {
+	StockID  uint             `json:"stock_id"`
+	Ticker   string           `json:"ticker"`
+	Interval string           `json:"interval"`
+	Range    string           `json:"range"`
+	Timezone string           `json:"timezone"`
+	Candles  []IntradayCandle `json:"candles"`
+}
+
+type cachedIntraday struct {
+	data    *IntradayResponse
+	expires time.Time
+}
 
 type SyncResult struct {
 	Prices     int
@@ -56,28 +76,31 @@ type SyncOptions struct {
 }
 
 type Service struct {
-	db       *gorm.DB
-	yahoo    *Yahoo
-	news     *NewsFeed
-	quoteTTL time.Duration
-	delay    time.Duration
-	now      func() time.Time
-	mu       sync.Mutex
-	quotes   map[uint]cachedQuote
-	hourly   map[uint]cachedHourly
-	group    singleflight.Group
+	db            *gorm.DB
+	yahoo         *Yahoo
+	news          *NewsFeed
+	quoteTTL      time.Duration
+	delay         time.Duration
+	now           func() time.Time
+	mu            sync.Mutex
+	quotes        map[uint]cachedQuote
+	hourly        map[uint]cachedHourly
+	intradayCache map[string]cachedIntraday
+	group         singleflight.Group
+	intradayGroup singleflight.Group
 }
 
 func NewService(db *gorm.DB, yahoo config.Yahoo, news config.News) *Service {
 	return &Service{
-		db:       db,
-		yahoo:    NewYahoo(yahoo),
-		news:     NewNewsFeed(news),
-		quoteTTL: max(time.Second, yahoo.QuoteTTL),
-		delay:    yahoo.Delay,
-		now:      time.Now,
-		quotes:   map[uint]cachedQuote{},
-		hourly:   map[uint]cachedHourly{},
+		db:            db,
+		yahoo:         NewYahoo(yahoo),
+		news:          NewNewsFeed(news),
+		quoteTTL:      max(time.Second, yahoo.QuoteTTL),
+		delay:         yahoo.Delay,
+		now:           time.Now,
+		quotes:        map[uint]cachedQuote{},
+		hourly:        map[uint]cachedHourly{},
+		intradayCache: map[string]cachedIntraday{},
 	}
 }
 
@@ -255,6 +278,77 @@ func (s *Service) Hourly(ctx context.Context, stock *models.Stock) ([]IntradayCa
 	}
 
 	return value.([]IntradayCandle), nil
+}
+
+func (s *Service) Intraday(ctx context.Context, stock *models.Stock, interval string) (*IntradayResponse, error) {
+	spec, ok := LookupIntradaySpec(interval)
+	if !ok {
+		return nil, ErrInvalidInterval
+	}
+
+	key := fmt.Sprintf("%d:%s", stock.StockID, spec.Interval)
+	now := s.now()
+
+	s.mu.Lock()
+	cached, found := s.intradayCache[key]
+	s.mu.Unlock()
+
+	if found && now.Before(cached.expires) {
+		return cached.data, nil
+	}
+
+	value, err, _ := s.intradayGroup.Do(key, func() (any, error) {
+		chart, err := s.yahoo.FetchIntraday(ctx, stock.MarketCode(), spec)
+		if err != nil {
+			return nil, err
+		}
+
+		tz := chart.Meta.ExchangeTimezoneName
+		if tz == "" {
+			tz = "Asia/Jakarta"
+		}
+
+		res := &IntradayResponse{
+			StockID:  stock.StockID,
+			Ticker:   stock.Ticker,
+			Interval: spec.Interval,
+			Range:    spec.YahooRange,
+			Timezone: tz,
+			Candles:  chart.Candles,
+		}
+
+		now := s.now()
+		s.mu.Lock()
+		if len(s.intradayCache) >= maxIntradayCacheEntries {
+			for k, entry := range s.intradayCache {
+				if !now.Before(entry.expires) {
+					delete(s.intradayCache, k)
+				}
+			}
+			if len(s.intradayCache) >= maxIntradayCacheEntries {
+				var oldestKey string
+				var oldestExp time.Time
+				for k, entry := range s.intradayCache {
+					if oldestKey == "" || entry.expires.Before(oldestExp) {
+						oldestKey = k
+						oldestExp = entry.expires
+					}
+				}
+				if oldestKey != "" {
+					delete(s.intradayCache, oldestKey)
+				}
+			}
+		}
+		s.intradayCache[key] = cachedIntraday{data: res, expires: now.Add(spec.CacheTTL)}
+		s.mu.Unlock()
+
+		return res, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return value.(*IntradayResponse), nil
 }
 
 func (s *Service) buildQuote(stock *models.Stock, chart *Chart) *Quote {

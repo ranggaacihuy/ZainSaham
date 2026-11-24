@@ -1,10 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { CandlestickSeries, HistogramSeries, LineSeries, LineStyle } from 'lightweight-charts';
-import { Minus, MousePointer2, Square, Trash2, TrendingUp, Undo2 } from 'lucide-react';
-import { Tabs } from './ui';
+import { Minus, MousePointer2, RefreshCw, Square, Trash2, TrendingUp, Undo2 } from 'lucide-react';
+import { Button, Tabs } from './ui';
+import IntervalDropdown from './IntervalDropdown';
+import useAsync from '../hooks/useAsync';
 import useChart from '../hooks/useChart';
-import { TIMEFRAMES, aggregatePrices } from '../lib/market';
-import { continuesSeries, priceFormat, showLatest, volumeFormat, withAlpha } from '../lib/chart';
+import { getIntradayPrices } from '../api/stocks';
+import { aggregateByInterval, getIntervalMeta } from '../lib/market';
+import { configureTimeScale, continuesSeries, priceFormat, showLatest, volumeFormat, withAlpha } from '../lib/chart';
 import {
   DRAWING_PRESETS,
   DrawingPrimitive,
@@ -12,7 +15,7 @@ import {
   resolveDrawingColor,
   saveDrawings,
 } from '../lib/chartDrawings';
-import { compact, date, dateTime, idr, number } from '../lib/format';
+import { compact, date, idr, intradayDateTime, number } from '../lib/format';
 
 const MODES = [
   { value: 'candle', label: 'Candle' },
@@ -66,20 +69,20 @@ function setupPriceChart(chart, colors) {
       line.applyOptions({ color: nextColors.accent });
       this.volumeColors = { up: withAlpha(nextColors.up, 0.4), down: withAlpha(nextColors.down, 0.4) };
       if (this.bars) {
-        volume.setData(this.bars.map((p) => volumeOf(p, this.volumeColors)));
+        volume.setData(this.bars.map((p) => volumeOf(p, this.volumeColors, this.isIntraday)));
       }
     },
   };
 }
 
-function barTime(p) {
-  return p.timestamp ?? p.price_date;
+function barTime(p, isIntraday) {
+  return isIntraday ? p.timestamp : p.price_date;
 }
 
-function candleOf(p) {
+function candleOf(p, isIntraday) {
   const open = p.open_price ?? p.close_price;
   return {
-    time: barTime(p),
+    time: barTime(p, isIntraday),
     open,
     high: p.high_price ?? Math.max(open, p.close_price),
     low: p.low_price ?? Math.min(open, p.close_price),
@@ -87,27 +90,28 @@ function candleOf(p) {
   };
 }
 
-function lineOf(p) {
-  return { time: barTime(p), value: p.close_price };
+function lineOf(p, isIntraday) {
+  return { time: barTime(p, isIntraday), value: p.close_price };
 }
 
-function volumeOf(p, colors) {
+function volumeOf(p, colors, isIntraday) {
   const up = p.close_price >= (p.open_price ?? p.close_price);
-  return { time: barTime(p), value: p.volume ?? 0, color: up ? colors.up : colors.down };
+  return { time: barTime(p, isIntraday), value: p.volume ?? 0, color: up ? colors.up : colors.down };
 }
 
-function dateFromParam(param, bars) {
+function timeFromParam(param, bars, isIntraday) {
   if (typeof param.time === 'number' || typeof param.time === 'string') return param.time;
   if (param.logical !== undefined && bars.length > 0) {
     const idx = Math.max(0, Math.min(bars.length - 1, Math.round(param.logical)));
     const bar = bars[idx];
-    return bar ? barTime(bar) : null;
+    return bar ? barTime(bar, isIntraday) : null;
   }
   return null;
 }
 
-export default function StockChart({ ticker = '', prices = [], timeframe = '1H', onTimeframeChange, index = false }) {
+export default function StockChart({ stockId, ticker = '', prices = [], index = false }) {
   const [mode, setMode] = useState('candle');
+  const [interval, setInterval] = useState('1d');
   const [tool, setTool] = useState('cursor');
   const [preset, setPreset] = useState('support');
   const [drawings, setDrawings] = useState(() => loadDrawings(ticker));
@@ -115,7 +119,21 @@ export default function StockChart({ ticker = '', prices = [], timeframe = '1H',
   const [themeTick, setThemeTick] = useState(0);
 
   const { containerRef, apiRef, hoverIndex } = useChart(setupPriceChart);
-  const bars = useMemo(() => aggregatePrices(prices, timeframe), [prices, timeframe]);
+  const intervalMeta = getIntervalMeta(interval);
+  const isIntraday = Boolean(intervalMeta.intraday);
+
+  const intraday = useAsync(
+    (opts) => getIntradayPrices(stockId, interval, opts),
+    [stockId, interval],
+    { enabled: Boolean(stockId) && isIntraday },
+  );
+
+  const bars = useMemo(() => {
+    if (isIntraday) return intraday.data?.candles || [];
+    if (interval === '1w' || interval === '1mo') return aggregateByInterval(prices, interval);
+    return prices;
+  }, [isIntraday, intraday.data, interval, prices]);
+
   const precision = index ? 2 : 0;
 
   const primitiveRef = useRef(null);
@@ -126,6 +144,7 @@ export default function StockChart({ ticker = '', prices = [], timeframe = '1H',
   const modeRef = useRef(mode);
   const pendingRef = useRef(pendingPoint);
   const barsRef = useRef(bars);
+  const isIntradayRef = useRef(isIntraday);
 
   useEffect(() => {
     toolRef.current = tool;
@@ -133,6 +152,7 @@ export default function StockChart({ ticker = '', prices = [], timeframe = '1H',
     modeRef.current = mode;
     pendingRef.current = pendingPoint;
     barsRef.current = bars;
+    isIntradayRef.current = isIntraday;
   });
 
   // Simpan otomatis ke localStorage setiap daftar coretan berubah
@@ -172,30 +192,30 @@ export default function StockChart({ ticker = '', prices = [], timeframe = '1H',
   useEffect(() => {
     const api = apiRef.current;
     if (!api) return;
-    const live = api.timeframe === timeframe && continuesSeries(api.bars, bars, 'price_date');
+    const live = !isIntraday && api.interval === interval && continuesSeries(api.bars, bars, 'price_date');
     api.bars = bars;
-    api.timeframe = timeframe;
+    api.interval = interval;
+    api.isIntraday = isIntraday;
 
     if (live) {
       const last = bars[bars.length - 1];
-      api.candle.update(candleOf(last));
-      api.line.update(lineOf(last));
-      api.volume.update(volumeOf(last, api.volumeColors));
+      api.candle.update(candleOf(last, false));
+      api.line.update(lineOf(last, false));
+      api.volume.update(volumeOf(last, api.volumeColors, false));
       return;
     }
 
+    configureTimeScale(api.chart, isIntraday);
     const format = priceFormat(precision);
     api.candle.applyOptions({ priceFormat: format });
-    api.line.applyOptions({ priceFormat: format });
-    api.candle.setData(bars.map(candleOf));
-    const isIntraday = timeframe === '1J';
-    api.chart.applyOptions({
-      timeScale: { timeVisible: isIntraday, secondsVisible: false },
-    });
-    api.line.setData(bars.map(lineOf));
-    api.volume.setData(bars.map((p) => volumeOf(p, api.volumeColors)));
-    showLatest(api.chart, bars.length);
-  }, [apiRef, bars, timeframe, precision]);
+    api.line.applyOptions({ priceFormat: format, pointMarkersVisible: bars.length <= 1 });
+    api.candle.setData(bars.map((p) => candleOf(p, isIntraday)));
+    api.line.setData(bars.map((p) => lineOf(p, isIntraday)));
+    api.volume.setData(bars.map((p) => volumeOf(p, api.volumeColors, isIntraday)));
+    if (bars.length > 0) {
+      showLatest(api.chart, bars.length);
+    }
+  }, [apiRef, bars, interval, precision, isIntraday]);
 
   // Sinkronisasi PriceLine (Garis S/R) dan DrawingPrimitive (Trendline & Area)
   useEffect(() => {
@@ -229,7 +249,6 @@ export default function StockChart({ ticker = '', prices = [], timeframe = '1H',
       attachedSeriesRef.current = activeSeries;
     }
 
-    // Render ulang garis horizontal (Support/Resistance) dengan label di sumbu kanan
     priceLinesRef.current.forEach((pl) => {
       try {
         activeSeries.removePriceLine(pl);
@@ -280,12 +299,12 @@ export default function StockChart({ ticker = '', prices = [], timeframe = '1H',
         return;
       }
 
-      const timeStr = dateFromParam(param, barsRef.current);
-      if (!timeStr) return;
+      const timeVal = timeFromParam(param, barsRef.current, isIntradayRef.current);
+      if (timeVal === null || timeVal === undefined) return;
 
       const first = pendingRef.current;
       if (!first) {
-        setPendingPoint({ time: timeStr, price: snappedPrice });
+        setPendingPoint({ time: timeVal, price: snappedPrice });
       } else {
         setDrawings((prev) => [
           ...prev,
@@ -294,7 +313,7 @@ export default function StockChart({ ticker = '', prices = [], timeframe = '1H',
             type: activeTool,
             t1: first.time,
             p1: first.price,
-            t2: timeStr,
+            t2: timeVal,
             p2: snappedPrice,
             preset: presetRef.current,
           },
@@ -315,8 +334,8 @@ export default function StockChart({ ticker = '', prices = [], timeframe = '1H',
 
       const activeSeries = modeRef.current === 'candle' ? api.candle : api.line;
       const rawPrice = activeSeries.coordinateToPrice(param.point.y);
-      const timeStr = dateFromParam(param, barsRef.current);
-      if (rawPrice === null || rawPrice === undefined || !timeStr) return;
+      const timeVal = timeFromParam(param, barsRef.current, isIntradayRef.current);
+      if (rawPrice === null || rawPrice === undefined || timeVal === null || timeVal === undefined) return;
 
       const snappedPrice = index ? Number(rawPrice.toFixed(2)) : Math.round(rawPrice);
       primitiveRef.current?.setState({
@@ -324,7 +343,7 @@ export default function StockChart({ ticker = '', prices = [], timeframe = '1H',
           type: activeTool,
           t1: first.time,
           p1: first.price,
-          t2: timeStr,
+          t2: timeVal,
           p2: snappedPrice,
           preset: presetRef.current,
         },
@@ -339,6 +358,12 @@ export default function StockChart({ ticker = '', prices = [], timeframe = '1H',
       api.chart.unsubscribeCrosshairMove(handleMove);
     };
   }, [apiRef, index]);
+
+  const handleSelectInterval = (nextInterval) => {
+    setPendingPoint(null);
+    primitiveRef.current?.setState({ preview: null });
+    setInterval(nextInterval);
+  };
 
   const handleSelectTool = (nextTool) => {
     setTool(nextTool);
@@ -368,19 +393,35 @@ export default function StockChart({ ticker = '', prices = [], timeframe = '1H',
         ? pendingPoint
           ? 'Klik titik kedua untuk menyelesaikan coretan. Tekan Esc untuk batal.'
           : 'Klik titik pertama pada grafik, lalu klik titik kedua. Tekan Esc untuk selesai.'
-        : 'Geser untuk menggulir, scroll atau cubit untuk zoom.';
+        : isIntraday
+          ? `Candle interval ${intervalMeta.label} (${intervalMeta.rangeNote}, zona waktu WIB). Geser untuk menggulir, scroll atau cubit untuk zoom.`
+          : 'Geser untuk menggulir, scroll atau cubit untuk zoom.';
 
   return (
     <div className="rounded-cards bg-surface shadow-subtle">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3">
-        <Tabs
-          variant="segmented"
-          size="sm"
-          label="Ukuran candle"
-          items={TIMEFRAMES}
-          value={timeframe}
-          onChange={(value) => onTimeframeChange?.(value)}
-        />
+        <div className="flex flex-wrap items-center gap-2">
+          <IntervalDropdown value={interval} onChange={handleSelectInterval} />
+
+          {isIntraday && (
+            <div className="flex items-center gap-1.5">
+              <span className="num hidden rounded-md border border-border bg-bg px-2 py-1 text-[11px] text-text-muted sm:inline-block">
+                {intervalMeta.rangeNote} · WIB
+              </span>
+              <button
+                type="button"
+                onClick={intraday.reload}
+                disabled={intraday.loading}
+                title="Muat ulang data intraday"
+                aria-label="Muat ulang data intraday"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-buttons border border-border bg-surface text-text-muted transition-colors duration-150 hover:border-border-strong hover:bg-surface-2 hover:text-text disabled:opacity-50"
+              >
+                <RefreshCw className={`h-3.5 w-3.5 ${intraday.loading ? 'animate-spin' : ''}`} strokeWidth={1.75} />
+              </button>
+            </div>
+          )}
+        </div>
+
         <Tabs variant="segmented" size="sm" label="Jenis grafik" items={MODES} value={mode} onChange={setMode} />
       </div>
 
@@ -460,14 +501,28 @@ export default function StockChart({ ticker = '', prices = [], timeframe = '1H',
       </div>
 
       <div className="px-4 pb-4 pt-3">
+        {isIntraday && intraday.error && (
+          <div
+            role="alert"
+            className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-down/30 bg-down/[0.04] px-3.5 py-2.5 text-xs text-down"
+          >
+            <span>{intraday.error.message || 'Data intraday belum tersedia saat ini.'}</span>
+            <div className="flex items-center gap-2">
+              <Button size="sm" variant="secondary" onClick={intraday.reload}>
+                Coba lagi
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => handleSelectInterval('1d')}>
+                Kembali ke 1 hari
+              </Button>
+            </div>
+          </div>
+        )}
+
         {active && (
           <dl className="num mb-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-text-muted">
             <div>
-              <dt className="sr-only">Tanggal</dt>
-              <dd className="text-text">{date(active.price_date)}</dd>
-              <dd className="text-text">
-                 {timeframe === '1J' ? dateTime(active.price_date) : date(active.price_date)}
-              </dd>
+              <dt className="sr-only">Waktu</dt>
+              <dd className="text-text">{isIntraday ? intradayDateTime(active.timestamp) : date(active.price_date)}</dd>
             </div>
             {[
               ['O', active.open_price],
@@ -487,12 +542,32 @@ export default function StockChart({ ticker = '', prices = [], timeframe = '1H',
           </dl>
         )}
 
-        <div
-          ref={containerRef}
-          role="figure"
-          aria-label="Grafik harga dan volume"
-          className={`h-80 w-full sm:h-96 ${tool !== 'cursor' ? 'cursor-crosshair' : ''}`}
-        />
+        <div className="relative">
+          <div
+            ref={containerRef}
+            role="figure"
+            aria-label="Grafik harga dan volume"
+            className={`h-80 w-full sm:h-96 ${tool !== 'cursor' ? 'cursor-crosshair' : ''}`}
+          />
+
+          {isIntraday && intraday.loading && (
+            <div className="absolute inset-0 flex items-center justify-center rounded-lg bg-surface/75">
+              <div className="flex items-center gap-2 rounded-buttons border border-border bg-surface px-3.5 py-2 text-xs text-text-muted shadow-subtle">
+                <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-border-strong border-t-text" aria-hidden="true" />
+                <span>Memuat candle {intervalMeta.label}…</span>
+              </div>
+            </div>
+          )}
+
+          {isIntraday && !intraday.loading && !intraday.error && bars.length === 0 && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 rounded-lg bg-surface/90 p-4 text-center">
+              <p className="text-sm text-text-muted">Data candle {intervalMeta.label} belum tersedia untuk emiten ini.</p>
+              <Button size="sm" variant="secondary" onClick={() => handleSelectInterval('1d')}>
+                Lihat grafik harian
+              </Button>
+            </div>
+          )}
+        </div>
 
         <p className="mt-3 text-xs text-text-muted">{hintText}</p>
       </div>

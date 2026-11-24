@@ -3,6 +3,7 @@ package httpapi
 import (
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/ranggaacihuy/zainsaham/backend/internal/analysis"
@@ -12,16 +13,23 @@ import (
 )
 
 type Server struct {
-	db       *gorm.DB
-	cfg      config.App
-	market   *market.Service
-	analysis *analysis.Service
+	db              *gorm.DB
+	cfg             config.App
+	market          *market.Service
+	analysis        *analysis.Service
+	intradayLimiter *rateLimiter
 }
 
 func NewServer(db *gorm.DB, cfg config.App, marketService *market.Service, analysisService *analysis.Service) *Server {
 	registerValidation()
 
-	return &Server{db: db, cfg: cfg, market: marketService, analysis: analysisService}
+	return &Server{
+		db:              db,
+		cfg:             cfg,
+		market:          marketService,
+		analysis:        analysisService,
+		intradayLimiter: newRateLimiter(45, time.Minute),
+	}
 }
 
 func (s *Server) Router() *gin.Engine {
@@ -58,6 +66,7 @@ func (s *Server) Router() *gin.Engine {
 	api.GET("/news", s.newsFeed)
 
 	private := api.Group("", s.requireAuth)
+	private.GET("/stocks/:stockId/intraday", s.rateLimitIntraday, s.stockIntraday)
 	private.GET("/me", s.me)
 	private.POST("/logout", s.logout)
 	private.PUT("/profile", s.updateProfile)

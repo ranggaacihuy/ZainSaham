@@ -41,26 +41,37 @@ export function saveDrawings(ticker, items) {
   }
 }
 
-function nearestBarTime(bars, targetDate) {
-  if (!bars?.length || !targetDate) return targetDate;
+function barKey(bar) {
+  return bar.timestamp ?? bar.price_date;
+}
+
+function nearestBarTime(bars, target) {
+  if (!bars?.length || target === null || target === undefined) return target;
+  const sample = barKey(bars[0]);
+  if (typeof sample !== typeof target) return null;
+
   let lo = 0;
   let hi = bars.length - 1;
   while (lo < hi) {
     const mid = (lo + hi) >> 1;
-    if (bars[mid].price_date < targetDate) lo = mid + 1;
+    if (barKey(bars[mid]) < target) lo = mid + 1;
     else hi = mid;
   }
-  if (lo > 0 && bars[lo].price_date > targetDate) {
-    return bars[lo - 1].price_date;
+  if (lo > 0 && barKey(bars[lo]) > target) {
+    return barKey(bars[lo - 1]);
   }
-  return bars[lo].price_date;
+  return barKey(bars[lo]);
 }
 
-function toX(chart, bars, timeStr) {
+function toX(chart, bars, timeVal) {
+  if (timeVal === null || timeVal === undefined) return null;
   const timeScale = chart.timeScale();
-  const direct = timeScale.timeToCoordinate(timeStr);
+  const sample = bars?.length ? barKey(bars[0]) : null;
+  if (sample !== null && typeof sample !== typeof timeVal) return null;
+  const direct = timeScale.timeToCoordinate(timeVal);
   if (direct !== null) return direct;
-  const fallback = nearestBarTime(bars, timeStr);
+  const fallback = nearestBarTime(bars, timeVal);
+  if (fallback === null) return null;
   return timeScale.timeToCoordinate(fallback);
 }
 

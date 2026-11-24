@@ -129,3 +129,49 @@ func TestQuoteErrors(t *testing.T) {
 
 	e.call(http.MethodGet, "/api/stocks/999/quote", "", nil).assertStatus(http.StatusNotFound)
 }
+
+func TestIntradayRequiresAuthValidatesAndSanitizesErrors(t *testing.T) {
+	e := newEnv(t)
+	stock := testutil.Stock(t, e.db, "BBCA")
+	user := testutil.User(t, e.db, "intraday@test.com")
+	token := testutil.Token(t, e.db, user)
+	base := "/api/stocks/" + itoa(stock.StockID) + "/intraday"
+
+	e.call(http.MethodGet, base+"?interval=5m", "", nil).assertStatus(http.StatusUnauthorized)
+	e.call(http.MethodGet, base+"?interval=3m", token, nil).assertStatus(http.StatusUnprocessableEntity)
+	e.call(http.MethodGet, base+"?interval=1m%26foo=bar", token, nil).assertStatus(http.StatusUnprocessableEntity)
+
+	ts1 := time.Date(2026, 11, 20, 2, 0, 0, 0, time.UTC).Unix()
+	ts2 := time.Date(2026, 11, 20, 2, 5, 0, 0, time.UTC).Unix()
+	e.yahoo.set(func(path string, w http.ResponseWriter) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"chart": map[string]any{
+			"result": []any{map[string]any{
+				"meta":      map[string]any{"symbol": "BBCA.JK", "exchangeTimezoneName": "Asia/Jakarta"},
+				"timestamp": []int64{ts1, ts2},
+				"indicators": map[string]any{"quote": []any{map[string]any{
+					"open":   []any{9000.0, 9025.0},
+					"high":   []any{9050.0, 9075.0},
+					"low":    []any{8975.0, 9000.0},
+					"close":  []any{9025.0, 9050.0},
+					"volume": []any{1200.0, 1800.0},
+				}}},
+			}},
+			"error": nil,
+		}})
+	})
+
+	e.call(http.MethodGet, base+"?interval=5m", token, nil).
+		assertStatus(http.StatusOK).
+		assertPath("data.interval", "5m").
+		assertCount("data.candles", 2).
+		assertPath("data.candles.0.close_price", 9025)
+
+	if !strings.Contains(e.yahoo.last().query, "interval=5m") || !strings.Contains(e.yahoo.last().query, "range=1mo") {
+		t.Fatalf("query = %s", e.yahoo.last().query)
+	}
+
+	e.yahoo.set(func(path string, w http.ResponseWriter) { w.WriteHeader(http.StatusTooManyRequests) })
+	e.call(http.MethodGet, base+"?interval=1m", token, nil).
+		assertStatus(http.StatusBadGateway).
+		assertPath("message", "Data candlestick intraday belum dapat diambil dari Yahoo Finance.")
+}

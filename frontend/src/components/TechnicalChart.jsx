@@ -1,8 +1,7 @@
 import { useEffect, useMemo } from 'react';
 import { HistogramSeries, LineSeries, LineStyle, createTextWatermark } from 'lightweight-charts';
-import { Badge, Tabs } from './ui';
+import { Badge } from './ui';
 import useChart from '../hooks/useChart';
-import { TIMEFRAMES, aggregatePrices } from '../lib/market';
 import { indicatorSeries } from '../lib/indicators';
 import { continuesSeries, priceFormat, showLatest, withAlpha } from '../lib/chart';
 import { date, idr, number } from '../lib/format';
@@ -97,15 +96,19 @@ function LegendItem({ swatch, label, value }) {
   );
 }
 
-export default function TechnicalChart({ prices = [], description, timeframe = '1H', onTimeframeChange, index = false }) {
+export default function TechnicalChart({ prices = [], description, index = false }) {
   const { containerRef, apiRef, hoverIndex } = useChart(setupIndicatorChart);
-  const history = useMemo(() => indicatorSeries(aggregatePrices(prices, timeframe)), [prices, timeframe]);
+  const history = useMemo(() => indicatorSeries(prices), [prices]);
 
   useEffect(() => {
     const api = apiRef.current;
-    const live = api.timeframe === timeframe && continuesSeries(api.history, history, 'indicator_date');
+    const live = continuesSeries(api.history, history, 'indicator_date');
     api.history = history;
-    api.timeframe = timeframe;
+
+    const singlePoint = history.length <= 1;
+    api.rsi.applyOptions({ pointMarkersVisible: singlePoint });
+    api.macd.applyOptions({ pointMarkersVisible: singlePoint });
+    api.signal.applyOptions({ pointMarkersVisible: singlePoint });
 
     const series = [
       [api.rsi, (h) => point(h.indicator_date, h.rsi_14)],
@@ -122,7 +125,7 @@ export default function TechnicalChart({ prices = [], description, timeframe = '
 
     series.forEach(([target, toPoint]) => target.setData(history.map(toPoint)));
     showLatest(api.chart, history.length);
-  }, [apiRef, history, timeframe]);
+  }, [apiRef, history]);
 
   const d = description;
   const active = (hoverIndex !== null && history[hoverIndex]) || history[history.length - 1];
@@ -147,18 +150,7 @@ export default function TechnicalChart({ prices = [], description, timeframe = '
       {d.date && <p className="text-xs text-text-muted">Indikator harian per {date(d.date)}.</p>}
 
       <div className="rounded-cards bg-surface shadow-subtle">
-        <div className="border-b border-border px-4 py-3">
-          <Tabs
-            variant="segmented"
-            size="sm"
-            label="Ukuran candle"
-            items={TIMEFRAMES}
-            value={timeframe}
-            onChange={(value) => onTimeframeChange?.(value)}
-          />
-        </div>
-
-        <div className="px-4 pb-4 pt-3">
+        <div className="px-4 pb-4 pt-4">
           {active && (
             <dl className="num mb-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-text-muted">
               <div>
