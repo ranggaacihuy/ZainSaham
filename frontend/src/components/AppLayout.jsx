@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { Bookmark, History, LayoutDashboard, LineChart, LogOut, MessageSquareText, Moon, Sun } from 'lucide-react';
+import { Bookmark, History, LayoutDashboard, LineChart, LogOut, MessageSquareText, Moon, Scale, Sun } from 'lucide-react';
 import { displayName, useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import SearchModal from './SearchModal';
@@ -9,6 +9,7 @@ import { Logo } from './ui/Logo';
 const NAV_ITEMS = [
   { label: 'Dashboard', short: 'Dashboard', path: '/dashboard', icon: LayoutDashboard, match: ['/dashboard', '/'] },
   { label: 'Daftar Saham', short: 'Saham', path: '/stocks', icon: LineChart, match: ['/stocks', '/saham'] },
+  { label: 'Bandingkan', short: 'Banding', path: '/compare', icon: Scale, match: ['/compare'] },
   { label: 'Watchlist', short: 'Watchlist', path: '/watchlist', icon: Bookmark, match: ['/watchlist'] },
   { label: 'Analisis AI', short: 'Analisis', path: '/ai-analysis', icon: MessageSquareText, match: ['/ai-analysis'] },
   { label: 'Riwayat', short: 'Riwayat', path: '/analysis-history', icon: History, match: ['/analysis-history'] },

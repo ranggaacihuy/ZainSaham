@@ -358,3 +358,136 @@ func queryInt(c *gin.Context, key string, fallback int) int {
 func escapeLike(value string) string {
 	return strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(value)
 }
+
+const maxCompareStocks = 3
+
+type stockCompareItem struct {
+	Stock        stockItem                  `json:"stock"`
+	Prices       []models.StockPrice        `json:"prices"`
+	Indicator    *models.TechnicalIndicator `json:"indicator"`
+	Fundamentals []models.StockFundamental  `json:"fundamentals"`
+}
+
+func (s *Server) compareStocks(c *gin.Context) {
+	rawTickers := strings.TrimSpace(c.Query("tickers"))
+	if rawTickers == "" {
+		validationError(c, "tickers", "Pilih minimal 1 saham untuk dibandingkan.")
+		return
+	}
+
+	tickers := make([]string, 0, maxCompareStocks)
+	seen := make(map[string]struct{}, maxCompareStocks)
+	for part := range strings.SplitSeq(rawTickers, ",") {
+		t := strings.ToUpper(strings.TrimSpace(part))
+		if t == "" {
+			continue
+		}
+		if _, exists := seen[t]; exists {
+			continue
+		}
+		if len(tickers) >= maxCompareStocks {
+			validationError(c, "tickers", "Maksimal 3 saham yang dapat dibandingkan.")
+			return
+		}
+		seen[t] = struct{}{}
+		tickers = append(tickers, t)
+	}
+
+	if len(tickers) == 0 {
+		validationError(c, "tickers", "Pilih minimal 1 saham untuk dibandingkan.")
+		return
+	}
+
+	rangeKey := strings.ToUpper(strings.TrimSpace(c.Query("range")))
+	months := 0
+	if rangeKey != "" {
+		m, known := rangeMonths[rangeKey]
+		if !known {
+			validationError(c, "range", "Rentang waktu tidak valid. Pilih 1B, 3B, 6B, 1T, atau 5T.")
+			return
+		}
+		months = m
+	}
+
+	stocks := []models.Stock{}
+	if err := s.db.Where("UPPER(ticker) IN ?", tickers).Find(&stocks).Error; err != nil {
+		serverError(c, err)
+		return
+	}
+	if len(stocks) == 0 {
+		fail(c, http.StatusNotFound, stockNotFound)
+		return
+	}
+
+	byTicker := make(map[string]models.Stock, len(stocks))
+	for _, st := range stocks {
+		byTicker[strings.ToUpper(st.Ticker)] = st
+	}
+
+	ordered := make([]models.Stock, 0, len(stocks))
+	ids := make([]uint, 0, len(stocks))
+	for _, t := range tickers {
+		if st, found := byTicker[t]; found {
+			ordered = append(ordered, st)
+			ids = append(ids, st.StockID)
+		}
+	}
+
+	items, err := s.withSummaries(ordered)
+	if err != nil {
+		serverError(c, err)
+		return
+	}
+
+	var cutoff *models.Date
+	if months > 0 {
+		var latest models.StockPrice
+		err := s.db.Select("price_date").Where("stock_id IN ?", ids).Order("price_date desc").First(&latest).Error
+		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+			serverError(c, err)
+			return
+		}
+		if err == nil {
+			d := models.NewDate(latest.PriceDate.AddDate(0, -months, 0))
+			cutoff = &d
+		}
+	}
+
+	result := make([]stockCompareItem, 0, len(items))
+	for _, item := range items {
+		priceQuery := s.db.Where("stock_id = ?", item.StockID)
+		if cutoff != nil {
+			priceQuery = priceQuery.Where("price_date >= ?", *cutoff)
+		}
+		prices := []models.StockPrice{}
+		if err := priceQuery.Order("price_date").Find(&prices).Error; err != nil {
+			serverError(c, err)
+			return
+		}
+
+		var latestIndicator models.TechnicalIndicator
+		var indicatorPtr *models.TechnicalIndicator
+		indErr := s.db.Where("stock_id = ?", item.StockID).Order("indicator_date desc").First(&latestIndicator).Error
+		if indErr == nil {
+			indicatorPtr = &latestIndicator
+		} else if !errors.Is(indErr, gorm.ErrRecordNotFound) {
+			serverError(c, indErr)
+			return
+		}
+
+		fundamentals := []models.StockFundamental{}
+		if err := s.db.Where("stock_id = ?", item.StockID).Order("period desc").Limit(4).Find(&fundamentals).Error; err != nil {
+			serverError(c, err)
+			return
+		}
+
+		result = append(result, stockCompareItem{
+			Stock:        item,
+			Prices:       prices,
+			Indicator:    indicatorPtr,
+			Fundamentals: fundamentals,
+		})
+	}
+
+	ok(c, result)
+}

@@ -16,10 +16,17 @@ import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 
 const StockDetailPage = lazy(() => import('./pages/StockDetailPage'));
+const ComparePage = lazy(() => import('./pages/ComparePage'));
 
 const stockDetail = (
   <Suspense fallback={null}>
     <StockDetailPage />
+  </Suspense>
+);
+
+const comparePage = (
+  <Suspense fallback={null}>
+    <ComparePage />
   </Suspense>
 );
 
@@ -88,6 +95,8 @@ export default function App() {
                   <Route path="/stocks/:ticker" element={stockDetail} />
                   <Route path="/saham/:ticker" element={stockDetail} />
                   <Route path="/watchlist" element={<WatchlistPage />} />
+                  <Route path="/watchlist" element={<WatchlistPage />} />
+                  <Route path="/compare" element={comparePage} />
                   <Route path="/ai-analysis" element={<AiAnalysisPage />} />
                   <Route path="/analysis-history" element={<AnalysisHistoryPage />} />
                   <Route path="/profile" element={<ProfilePage />} />

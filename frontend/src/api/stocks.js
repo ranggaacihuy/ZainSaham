@@ -132,3 +132,26 @@ export function getFundamentals(stockId, options) {
 export function getNews(stockId, options) {
   return newsCache.get(Number(stockId), options);
 }
+
+export async function compareStocks(tickers = [], range = '6B') {
+  const clean = tickers
+    .map((t) => String(t || '').trim().toUpperCase())
+    .filter(Boolean)
+    .slice(0, 3);
+  if (clean.length === 0) return [];
+
+  const res = await api.get('/compare', {
+    params: { tickers: clean.join(','), range: range || undefined },
+  });
+  const list = unwrap(res);
+  if (!Array.isArray(list)) return [];
+
+  return list.map((item) => ({
+    stock: normalizeStock(item.stock),
+    prices: normalizeList(item.prices, normalizePrice).filter(
+      (p) => p.price_date && p.close_price !== null,
+    ),
+    indicator: item.indicator ? normalizeIndicator(item.indicator) : null,
+    fundamentals: normalizeList(item.fundamentals, normalizeFundamental),
+  }));
+}

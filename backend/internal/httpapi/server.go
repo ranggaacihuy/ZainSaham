@@ -57,6 +57,7 @@ func (s *Server) Router() *gin.Engine {
 	api.POST("/login", s.login)
 
 	api.GET("/stocks", s.listStocks)
+	api.GET("/compare", s.compareStocks)
 	api.GET("/stocks/:stockId", s.showStock)
 	api.GET("/stocks/:stockId/prices", s.stockPrices)
 	api.GET("/stocks/:stockId/quote", s.stockQuote)
@@ -89,4 +90,5 @@ func (s *Server) Router() *gin.Engine {
 	private.DELETE("/ai-sessions/:sessionId", s.deleteSession)
 
 	return router
+	
 }
