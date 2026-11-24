@@ -1,12 +1,24 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
-const CHART_HEIGHT = 320;
+const CHART_HEIGHT = 340;
 const PAD = { top: 20, right: 16, bottom: 32, left: 64 };
+
+function toFinite(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+function toEpochMs(ts) {
+  const n = toFinite(ts);
+  if (n === null) return null;
+  return n < 1e12 ? n * 1000 : n;
+}
 
 function formatShortDate(dateStr) {
   if (!dateStr) return '';
-  const [y, m, d] = dateStr.split('-').map(Number);
-  if (!y || !m || !d) return dateStr;
+  const [y, m, d] = String(dateStr).split('-').map(Number);
+  if (!y || !m || !d) return String(dateStr);
   return new Date(y, m - 1, d).toLocaleDateString('id-ID', {
     day: 'numeric',
     month: 'short',
@@ -14,10 +26,57 @@ function formatShortDate(dateStr) {
   });
 }
 
+function formatAxisLabel(key, intraday, multiDay) {
+  if (!intraday) return formatShortDate(key);
+  const dt = new Date(key);
+  if (Number.isNaN(dt.getTime())) return '';
+  if (!multiDay) {
+    return dt.toLocaleTimeString('id-ID', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+      timeZone: 'Asia/Jakarta',
+    });
+  }
+  return dt.toLocaleString('id-ID', {
+    day: 'numeric',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+    timeZone: 'Asia/Jakarta',
+  });
+}
+
+function formatTooltipLabel(key, intraday) {
+  if (!intraday) return formatShortDate(key);
+  const dt = new Date(key);
+  if (Number.isNaN(dt.getTime())) return '';
+  const formatted = dt.toLocaleString('id-ID', {
+    day: 'numeric',
+    month: 'short',
+    year: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+    timeZone: 'Asia/Jakarta',
+  });
+  return `${formatted} WIB`;
+}
+
 function formatPriceLabel(value, currency = 'IDR') {
   if (value === null || value === undefined || !Number.isFinite(value)) return '—';
   const prefix = currency === 'USD' ? '$' : 'Rp ';
-  return `${prefix}${new Intl.NumberFormat('id-ID', { maximumFractionDigits: currency === 'USD' ? 2 : 0 }).format(value)}`;
+  return `${prefix}${new Intl.NumberFormat('id-ID', {
+    maximumFractionDigits: currency === 'USD' ? 2 : 0,
+  }).format(value)}`;
+}
+
+function formatCompactPrice(value, currency = 'IDR') {
+  if (value === null || value === undefined || !Number.isFinite(value)) return '—';
+  return new Intl.NumberFormat('id-ID', {
+    maximumFractionDigits: currency === 'USD' ? 2 : 0,
+  }).format(value);
 }
 
 function formatPctLabel(value) {
@@ -26,7 +85,12 @@ function formatPctLabel(value) {
   return `${sign}${value.toFixed(2)}%`;
 }
 
-export default function CompareChart({ series = [], mode = 'pct' }) {
+export default function CompareChart({
+  series = [],
+  mode = 'pct',
+  chartType = 'candle',
+  intraday = false,
+}) {
   const containerRef = useRef(null);
   const [width, setWidth] = useState(720);
   const [hoverIdx, setHoverIdx] = useState(null);
@@ -41,52 +105,116 @@ export default function CompareChart({ series = [], mode = 'pct' }) {
     return () => observer.disconnect();
   }, []);
 
+  useEffect(() => {
+    setHoverIdx(null);
+  }, [series, mode, chartType, intraday]);
+
   const chartData = useMemo(() => {
-    const dateSet = new Set();
+    const keySet = new Set();
+
     series.forEach((s) => {
-      s.prices.forEach((p) => {
-        if (p.price_date && p.close_price !== null) dateSet.add(p.price_date);
+      (s.prices || []).forEach((p) => {
+        const close = toFinite(p.close_price);
+        if (close === null || close <= 0) return;
+        const key = intraday ? toEpochMs(p.timestamp) : p.price_date;
+        if (key !== null && key !== undefined && key !== '') {
+          keySet.add(key);
+        }
       });
     });
 
-    const dates = Array.from(dateSet).sort();
-    if (dates.length < 2) {
-      return { dates: [], lines: [], minVal: -5, maxVal: 5 };
+    const keys = intraday
+      ? Array.from(keySet).sort((a, b) => a - b)
+      : Array.from(keySet).sort();
+
+    if (keys.length < 2) {
+      return { keys: [], lines: [], minVal: -5, maxVal: 5, multiDay: false };
+    }
+
+    let multiDay = false;
+    if (intraday) {
+      const firstDay = new Date(keys[0]).toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' });
+      const lastDay = new Date(keys[keys.length - 1]).toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' });
+      multiDay = firstDay !== lastDay;
     }
 
     const lines = series.map((s) => {
-      const priceMap = new Map();
-      let basePrice = null;
+      const candleMap = new Map();
 
-      s.prices.forEach((p) => {
-        if (p.price_date && p.close_price !== null) {
-          priceMap.set(p.price_date, p.close_price);
-          if (basePrice === null && p.close_price > 0) {
-            basePrice = p.close_price;
-          }
-        }
+      (s.prices || []).forEach((p) => {
+        const close = toFinite(p.close_price);
+        if (close === null || close <= 0) return;
+        const key = intraday ? toEpochMs(p.timestamp) : p.price_date;
+        if (key === null || key === undefined || key === '') return;
+
+        const rawOpen = toFinite(p.open_price);
+        const open = rawOpen !== null && rawOpen > 0 ? rawOpen : close;
+        const rawHigh = toFinite(p.high_price);
+        const rawLow = toFinite(p.low_price);
+        const high = Math.max(rawHigh !== null && rawHigh > 0 ? rawHigh : close, open, close);
+        const low = Math.min(rawLow !== null && rawLow > 0 ? rawLow : close, open, close);
+
+        candleMap.set(key, { open, high, low, close });
       });
 
-      const points = dates.map((d, idx) => {
-        const close = priceMap.has(d) ? priceMap.get(d) : null;
-        if (close === null) return { idx, date: d, close: null, value: null };
-        const pct = basePrice ? ((close - basePrice) / basePrice) * 100 : null;
+      let basePrice = null;
+      for (const k of keys) {
+        const c = candleMap.get(k);
+        if (c && c.close > 0) {
+          basePrice = c.close;
+          break;
+        }
+      }
+
+      const toScale = (price) => {
+        if (mode === 'pct') {
+          return basePrice ? ((price - basePrice) / basePrice) * 100 : null;
+        }
+        return price;
+      };
+
+      const points = keys.map((k, idx) => {
+        const c = candleMap.get(k);
+        if (!c) {
+          return {
+            idx,
+            key: k,
+            open: null,
+            high: null,
+            low: null,
+            close: null,
+            pct: null,
+            oVal: null,
+            hVal: null,
+            lVal: null,
+            cVal: null,
+            bullish: true,
+          };
+        }
+
+        const pct = basePrice ? ((c.close - basePrice) / basePrice) * 100 : null;
         return {
           idx,
-          date: d,
-          close,
+          key: k,
+          open: c.open,
+          high: c.high,
+          low: c.low,
+          close: c.close,
           pct,
-          value: mode === 'pct' ? pct : close,
+          oVal: toScale(c.open),
+          hVal: toScale(c.high),
+          lVal: toScale(c.low),
+          cVal: toScale(c.close),
+          bullish: c.close >= c.open,
         };
       });
 
-      const validPoints = points.filter((pt) => pt.value !== null);
+      const validPoints = points.filter((pt) => pt.cVal !== null);
       const lastPoint = validPoints.length > 0 ? validPoints[validPoints.length - 1] : null;
 
       return {
         ...s,
         points,
-        lastValue: lastPoint?.value ?? null,
         lastPct: lastPoint?.pct ?? null,
         lastClose: lastPoint?.close ?? null,
       };
@@ -96,9 +224,13 @@ export default function CompareChart({ series = [], mode = 'pct' }) {
     let maxVal = -Infinity;
     lines.forEach((line) => {
       line.points.forEach((pt) => {
-        if (pt.value !== null) {
-          if (pt.value < minVal) minVal = pt.value;
-          if (pt.value > maxVal) maxVal = pt.value;
+        if (pt.cVal === null) return;
+        if (chartType === 'candle') {
+          if (pt.lVal !== null && pt.lVal < minVal) minVal = pt.lVal;
+          if (pt.hVal !== null && pt.hVal > maxVal) maxVal = pt.hVal;
+        } else {
+          if (pt.cVal < minVal) minVal = pt.cVal;
+          if (pt.cVal > maxVal) maxVal = pt.cVal;
         }
       });
     });
@@ -112,25 +244,30 @@ export default function CompareChart({ series = [], mode = 'pct' }) {
         maxVal = Math.max(maxVal, 0);
       }
       const span = maxVal - minVal || Math.abs(maxVal) * 0.1 || 1;
-      const padding = span * 0.12;
+      const padding = span * 0.1;
       minVal -= padding;
       maxVal += padding;
     }
 
-    return { dates, lines, minVal, maxVal };
-  }, [series, mode]);
+    return { keys, lines, minVal, maxVal, multiDay };
+  }, [series, mode, chartType, intraday]);
 
   const plotW = Math.max(100, width - PAD.left - PAD.right);
   const plotH = CHART_HEIGHT - PAD.top - PAD.bottom;
 
   const xFor = (idx) => {
-    if (chartData.dates.length <= 1) return PAD.left;
-    return PAD.left + (idx / (chartData.dates.length - 1)) * plotW;
+    const total = chartData.keys.length;
+    if (total <= 1) return PAD.left + plotW / 2;
+    if (chartType === 'candle') {
+      return PAD.left + ((idx + 0.5) / total) * plotW;
+    }
+    return PAD.left + (idx / (total - 1)) * plotW;
   };
 
   const yFor = (val) => {
     const span = chartData.maxVal - chartData.minVal || 1;
-    return PAD.top + ((chartData.maxVal - val) / span) * plotH;
+    const raw = PAD.top + ((chartData.maxVal - val) / span) * plotH;
+    return Math.max(PAD.top, Math.min(PAD.top + plotH, raw));
   };
 
   const yTicks = useMemo(() => {
@@ -144,9 +281,9 @@ export default function CompareChart({ series = [], mode = 'pct' }) {
   }, [chartData.maxVal, chartData.minVal]);
 
   const xTicks = useMemo(() => {
-    const total = chartData.dates.length;
+    const total = chartData.keys.length;
     if (total < 2) return [];
-    const maxLabels = width < 520 ? 4 : 6;
+    const maxLabels = width < 520 ? 3 : intraday && chartData.multiDay ? 5 : 6;
     const step = Math.max(1, Math.floor((total - 1) / (maxLabels - 1)));
     const indices = [];
     for (let i = 0; i < total; i += step) {
@@ -156,59 +293,78 @@ export default function CompareChart({ series = [], mode = 'pct' }) {
       indices[indices.length - 1] = total - 1;
     }
     return indices;
-  }, [chartData.dates.length, width]);
+  }, [chartData.keys.length, chartData.multiDay, intraday, width]);
 
   const handlePointerMove = (event) => {
-    if (chartData.dates.length < 2) return;
+    const total = chartData.keys.length;
+    if (total < 2) return;
     const rect = event.currentTarget.getBoundingClientRect();
     const relX = event.clientX - rect.left - PAD.left;
     const clamped = Math.max(0, Math.min(plotW, relX));
-    const idx = Math.round((clamped / plotW) * (chartData.dates.length - 1));
+    const idx =
+      chartType === 'candle'
+        ? Math.min(total - 1, Math.max(0, Math.floor((clamped / plotW) * total)))
+        : Math.round((clamped / plotW) * (total - 1));
     setHoverIdx(idx);
   };
 
-  if (chartData.dates.length < 2) {
+  if (chartData.keys.length < 2) {
     return (
       <div className="flex h-[260px] items-center justify-center rounded-xl border border-dashed border-border bg-surface-2/40 text-sm text-text-muted">
-        Data historis harga belum cukup untuk menampilkan grafik perbandingan.
+        Data harga untuk interval ini belum cukup untuk menampilkan grafik perbandingan.
       </div>
     );
   }
 
   const zeroY = mode === 'pct' ? yFor(0) : null;
   const hoverX = hoverIdx !== null ? xFor(hoverIdx) : null;
-  const tooltipOnLeft = hoverX !== null && hoverX > width * 0.62;
+  const tooltipOnLeft = hoverX !== null && hoverX > width * 0.58;
+
+  const seriesCount = Math.max(1, chartData.lines.length);
+  const slotW = plotW / chartData.keys.length;
+  const groupW = Math.min(28, Math.max(4, slotW * 0.78));
+  const innerGap = seriesCount > 1 ? Math.min(2, groupW * 0.08) : 0;
+  const candleW = Math.max(2, (groupW - innerGap * (seriesCount - 1)) / seriesCount);
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs">
-        {chartData.lines.map((line) => (
-          <div key={line.ticker} className="flex items-center gap-2">
-            <span
-              className="h-2.5 w-2.5 shrink-0 rounded-full"
-              style={{ backgroundColor: line.color }}
-              aria-hidden="true"
-            />
-            <span className="num font-semibold text-text">{line.ticker}</span>
-            <span
-              className={`num font-medium ${
-                (line.lastPct ?? 0) > 0
-                  ? 'text-emerald-500'
-                  : (line.lastPct ?? 0) < 0
-                    ? 'text-rose-500'
-                    : 'text-text-muted'
-              }`}
-            >
-              {formatPctLabel(line.lastPct)}
-            </span>
-          </div>
-        ))}
+      <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+          {chartData.lines.map((line) => (
+            <div key={line.ticker} className="flex items-center gap-2">
+              <span
+                className="h-2.5 w-2.5 shrink-0 rounded-full"
+                style={{ backgroundColor: line.color }}
+                aria-hidden="true"
+              />
+              <span className="num font-semibold text-text">{line.ticker}</span>
+              <span
+                className={`num font-medium ${
+                  (line.lastPct ?? 0) > 0
+                    ? 'text-emerald-500'
+                    : (line.lastPct ?? 0) < 0
+                      ? 'text-rose-500'
+                      : 'text-text-muted'
+                }`}
+              >
+                {formatPctLabel(line.lastPct)}
+              </span>
+            </div>
+          ))}
+        </div>
+
+        {chartType === 'candle' && seriesCount > 1 && (
+          <span className="text-[11px] text-text-muted">
+            Body penuh = naik · Body kosong = turun
+          </span>
+        )}
       </div>
 
       <div ref={containerRef} className="relative w-full select-none">
         <svg
           width={width}
           height={CHART_HEIGHT}
+          viewBox={`0 0 ${width} ${CHART_HEIGHT}`}
           className="block overflow-visible"
           onMouseMove={handlePointerMove}
           onMouseLeave={() => setHoverIdx(null)}
@@ -237,7 +393,10 @@ export default function CompareChart({ series = [], mode = 'pct' }) {
                 >
                   {mode === 'pct'
                     ? `${tick > 0 ? '+' : ''}${tick.toFixed(1)}%`
-                    : new Intl.NumberFormat('id-ID', { notation: 'compact', maximumFractionDigits: 1 }).format(tick)}
+                    : new Intl.NumberFormat('id-ID', {
+                        notation: 'compact',
+                        maximumFractionDigits: 1,
+                      }).format(tick)}
                 </text>
               </g>
             );
@@ -265,36 +424,101 @@ export default function CompareChart({ series = [], mode = 'pct' }) {
               textAnchor="middle"
               className="num fill-current text-[11px] text-text-muted"
             >
-              {formatShortDate(chartData.dates[idx])}
+              {formatAxisLabel(chartData.keys[idx], intraday, chartData.multiDay)}
             </text>
           ))}
 
-          {chartData.lines.map((line) => {
-            let d = '';
-            let drawing = false;
-            line.points.forEach((pt) => {
-              if (pt.value === null) {
-                drawing = false;
-                return;
-              }
-              const x = xFor(pt.idx).toFixed(2);
-              const y = yFor(pt.value).toFixed(2);
-              d += drawing ? ` L ${x} ${y}` : ` M ${x} ${y}`;
-              drawing = true;
-            });
+          {hoverIdx !== null && chartType === 'candle' && (
+            <rect
+              x={xFor(hoverIdx) - slotW / 2}
+              y={PAD.top}
+              width={slotW}
+              height={plotH}
+              fill="currentColor"
+              className="text-text-muted"
+              fillOpacity={0.07}
+            />
+          )}
 
-            return (
-              <path
-                key={line.ticker}
-                d={d.trim()}
-                fill="none"
-                stroke={line.color}
-                strokeWidth={2.25}
-                strokeLinejoin="round"
-                strokeLinecap="round"
-              />
-            );
-          })}
+          {chartType === 'candle'
+            ? chartData.lines.map((line, lineIdx) => (
+                <g key={line.ticker}>
+                  {line.points.map((pt) => {
+                    if (pt.cVal === null || pt.oVal === null || pt.hVal === null || pt.lVal === null) {
+                      return null;
+                    }
+                    const cx =
+                      xFor(pt.idx) -
+                      groupW / 2 +
+                      lineIdx * (candleW + innerGap) +
+                      candleW / 2;
+                    const yHigh = yFor(pt.hVal);
+                    const yLow = yFor(pt.lVal);
+                    const yOpen = yFor(pt.oVal);
+                    const yClose = yFor(pt.cVal);
+                    const bodyTop = Math.min(yOpen, yClose);
+                    const bodyH = Math.max(1.5, Math.abs(yClose - yOpen));
+
+                    const singleStock = seriesCount === 1;
+                    const color = singleStock
+                      ? pt.bullish
+                        ? '#10b981'
+                        : '#ef4444'
+                      : line.color;
+                    const fill =
+                      singleStock || pt.bullish
+                        ? color
+                        : 'var(--color-surface, #ffffff)';
+
+                    return (
+                      <g key={pt.idx}>
+                        <line
+                          x1={cx}
+                          y1={yHigh}
+                          x2={cx}
+                          y2={yLow}
+                          stroke={color}
+                          strokeWidth={1.2}
+                        />
+                        <rect
+                          x={cx - candleW / 2}
+                          y={bodyTop}
+                          width={candleW}
+                          height={bodyH}
+                          rx={0.75}
+                          fill={fill}
+                          fillOpacity={singleStock ? 0.92 : pt.bullish ? 0.9 : 1}
+                          stroke={color}
+                          strokeWidth={1.15}
+                        />
+                      </g>
+                    );
+                  })}
+                </g>
+              ))
+            : chartData.lines.map((line) => {
+                let d = '';
+                let started = false;
+                line.points.forEach((pt) => {
+                  if (pt.cVal === null) return;
+                  const x = xFor(pt.idx).toFixed(2);
+                  const y = yFor(pt.cVal).toFixed(2);
+                  d += started ? ` L ${x} ${y}` : ` M ${x} ${y}`;
+                  started = true;
+                });
+
+                return (
+                  <path
+                    key={line.ticker}
+                    d={d.trim()}
+                    fill="none"
+                    stroke={line.color}
+                    strokeWidth={2.25}
+                    strokeLinejoin="round"
+                    strokeLinecap="round"
+                  />
+                );
+              })}
 
           {hoverIdx !== null && (
             <g>
@@ -309,21 +533,22 @@ export default function CompareChart({ series = [], mode = 'pct' }) {
                 strokeOpacity={0.8}
                 strokeWidth={1}
               />
-              {chartData.lines.map((line) => {
-                const pt = line.points[hoverIdx];
-                if (!pt || pt.value === null) return null;
-                return (
-                  <circle
-                    key={line.ticker}
-                    cx={hoverX}
-                    cy={yFor(pt.value)}
-                    r={4.5}
-                    fill={line.color}
-                    stroke="var(--color-surface, #ffffff)"
-                    strokeWidth={2}
-                  />
-                );
-              })}
+              {chartType === 'line' &&
+                chartData.lines.map((line) => {
+                  const pt = line.points[hoverIdx];
+                  if (!pt || pt.cVal === null) return null;
+                  return (
+                    <circle
+                      key={line.ticker}
+                      cx={hoverX}
+                      cy={yFor(pt.cVal)}
+                      r={4.5}
+                      fill={line.color}
+                      stroke="var(--color-surface, #ffffff)"
+                      strokeWidth={2}
+                    />
+                  );
+                })}
             </g>
           )}
         </svg>
@@ -331,42 +556,52 @@ export default function CompareChart({ series = [], mode = 'pct' }) {
         {hoverIdx !== null && (
           <div
             style={{
-              left: tooltipOnLeft ? Math.max(8, hoverX - 210) : Math.min(width - 210, hoverX + 14),
+              left: tooltipOnLeft ? Math.max(8, hoverX - 248) : Math.min(width - 248, hoverX + 14),
               top: 12,
             }}
-            className="pointer-events-none absolute z-20 w-[196px] rounded-lg border border-border bg-surface/95 p-2.5 shadow-lg backdrop-blur-sm"
+            className="pointer-events-none absolute z-20 w-[236px] rounded-lg border border-border bg-surface/95 p-2.5 shadow-lg backdrop-blur-sm"
           >
             <p className="num mb-1.5 border-b border-border pb-1 text-[11px] font-medium text-text-muted">
-              {formatShortDate(chartData.dates[hoverIdx])}
+              {formatTooltipLabel(chartData.keys[hoverIdx], intraday)}
             </p>
-            <div className="space-y-1.5">
+            <div className="space-y-2">
               {chartData.lines.map((line) => {
                 const pt = line.points[hoverIdx];
                 return (
-                  <div key={line.ticker} className="flex items-center justify-between gap-2 text-xs">
-                    <span className="flex items-center gap-1.5 font-medium text-text">
-                      <span
-                        className="h-2 w-2 rounded-full"
-                        style={{ backgroundColor: line.color }}
-                      />
-                      <span className="num">{line.ticker}</span>
-                    </span>
-                    <span className="num text-right">
-                      <span
-                        className={`block font-semibold ${
-                          (pt?.pct ?? 0) > 0
-                            ? 'text-emerald-500'
-                            : (pt?.pct ?? 0) < 0
-                              ? 'text-rose-500'
-                              : 'text-text'
-                        }`}
-                      >
-                        {formatPctLabel(pt?.pct)}
+                  <div key={line.ticker} className="space-y-0.5 text-xs">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="flex items-center gap-1.5 font-medium text-text">
+                        <span
+                          className="h-2 w-2 rounded-full"
+                          style={{ backgroundColor: line.color }}
+                        />
+                        <span className="num">{line.ticker}</span>
                       </span>
-                      <span className="block text-[10px] text-text-muted">
-                        {formatPriceLabel(pt?.close, line.currency)}
+                      <span className="num flex items-center gap-1.5">
+                        <span className="font-medium text-text">
+                          {formatPriceLabel(pt?.close, line.currency)}
+                        </span>
+                        <span
+                          className={`font-semibold ${
+                            (pt?.pct ?? 0) > 0
+                              ? 'text-emerald-500'
+                              : (pt?.pct ?? 0) < 0
+                                ? 'text-rose-500'
+                                : 'text-text-muted'
+                          }`}
+                        >
+                          {formatPctLabel(pt?.pct)}
+                        </span>
                       </span>
-                    </span>
+                    </div>
+                    {chartType === 'candle' && pt?.close !== null && (
+                      <div className="num grid grid-cols-4 gap-1 pl-3.5 text-[10px] text-text-muted">
+                        <span>O {formatCompactPrice(pt.open, line.currency)}</span>
+                        <span>H {formatCompactPrice(pt.high, line.currency)}</span>
+                        <span>L {formatCompactPrice(pt.low, line.currency)}</span>
+                        <span>C {formatCompactPrice(pt.close, line.currency)}</span>
+                      </div>
+                    )}
                   </div>
                 );
               })}

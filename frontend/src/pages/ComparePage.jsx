@@ -10,20 +10,15 @@ import {
   Trophy,
   X,
 } from 'lucide-react';
-import { compareStocks, getStocks } from '../api/stocks';
+import { compareStocks, getIntradayPrices, getStocks } from '../api/stocks';
 import CompareChart from '../components/CompareChart';
+import IntervalDropdown from '../components/IntervalDropdown';
 import StockLogo from '../components/StockLogo';
 import StockSelectDropdown from '../components/StockSelectDropdown';
+import { getIntervalMeta } from '../lib/market';
 
 const MAX_SLOTS = 3;
 const SERIES_COLORS = ['#6366f1', '#10b981', '#f59e0b'];
-const RANGE_OPTIONS = [
-  { value: '1B', label: '1B' },
-  { value: '3B', label: '3B' },
-  { value: '6B', label: '6B' },
-  { value: '1T', label: '1T' },
-  { value: '5T', label: '5T' },
-];
 
 const DEFAULT_PRESETS = [
   { label: 'Bank Big Caps', tickers: ['BBCA', 'BBRI', 'BMRI'] },
@@ -31,6 +26,13 @@ const DEFAULT_PRESETS = [
   { label: 'Energi & Batu Bara', tickers: ['ADRO', 'PTBA', 'ITMG'] },
   { label: 'Konsumer', tickers: ['ICBP', 'INDF', 'UNVR'] },
 ];
+
+function getRangeForInterval(interval) {
+  const lower = String(interval || '1d').toLowerCase();
+  if (lower === '1w' || lower === '1wk') return '1T';
+  if (lower === '1mo' || lower === '1mth' || interval === '1M' || interval === '1B') return '5T';
+  return '3B';
+}
 
 function formatCurrency(value, currency = 'IDR') {
   if (value === null || value === undefined || !Number.isFinite(value)) return '—';
@@ -74,6 +76,53 @@ function formatPct(value) {
 function formatDecimal(value, suffix = '') {
   if (value === null || value === undefined || !Number.isFinite(value)) return '—';
   return `${value.toFixed(2)}${suffix}`;
+}
+
+function getWeekKey(dateStr) {
+  const [y, m, d] = String(dateStr).split('-').map(Number);
+  if (!y || !m || !d) return dateStr;
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  const day = dt.getUTCDay() || 7;
+  dt.setUTCDate(dt.getUTCDate() - day + 1);
+  return dt.toISOString().slice(0, 10);
+}
+
+function aggregatePrices(prices, interval) {
+  if (!Array.isArray(prices) || prices.length === 0) return [];
+  const lower = String(interval || '1d').toLowerCase();
+  const isWeekly = lower === '1w' || lower === '1wk';
+  const isMonthly = lower === '1mo' || lower === '1mth' || interval === '1M' || interval === '1B';
+  if (!isWeekly && !isMonthly) return prices;
+
+  const buckets = new Map();
+  prices.forEach((p) => {
+    if (!p.price_date || p.close_price === null) return;
+    const key = isWeekly ? getWeekKey(p.price_date) : p.price_date.slice(0, 7);
+    const existing = buckets.get(key);
+    if (!existing) {
+      buckets.set(key, { ...p });
+    } else {
+      existing.price_date = p.price_date;
+      existing.close_price = p.close_price;
+      if (p.high_price !== null) {
+        existing.high_price =
+          existing.high_price !== null ? Math.max(existing.high_price, p.high_price) : p.high_price;
+      }
+      if (p.low_price !== null) {
+        existing.low_price =
+          existing.low_price !== null ? Math.min(existing.low_price, p.low_price) : p.low_price;
+      }
+      existing.volume = (existing.volume || 0) + (p.volume || 0);
+    }
+  });
+
+  return Array.from(buckets.values());
+}
+
+function computeReturnPct(prices) {
+  const closes = (prices || []).map((p) => p.close_price).filter((v) => v !== null && v > 0);
+  if (closes.length < 2) return null;
+  return ((closes[closes.length - 1] - closes[0]) / closes[0]) * 100;
 }
 
 function computeMetrics(item) {
@@ -204,24 +253,28 @@ export default function ComparePage() {
   const [stocksLoading, setStocksLoading] = useState(true);
 
   const [slots, setSlots] = useState(() => parseSlotsFromParams(searchParams));
-  const [range, setRange] = useState(() => {
-    const param = (searchParams.get('range') || '6B').toUpperCase();
-    return RANGE_OPTIONS.some((r) => r.value === param) ? param : '6B';
-  });
+  const [interval, setIntervalValue] = useState(() => searchParams.get('interval') || '1d');
+  const [chartType, setChartType] = useState('candle');
   const [chartMode, setChartMode] = useState('pct');
 
   const [compared, setCompared] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
+  const [intradayMap, setIntradayMap] = useState({});
+  const [intradayLoading, setIntradayLoading] = useState(false);
+  const [intradayError, setIntradayError] = useState('');
+
+  const intervalMeta = useMemo(() => getIntervalMeta(interval), [interval]);
+  const isIntraday = Boolean(intervalMeta?.intraday);
+  const effectiveRange = useMemo(() => getRangeForInterval(interval), [interval]);
+
   useEffect(() => {
     let cancelled = false;
     setStocksLoading(true);
     getStocks()
       .then((list) => {
-        if (!cancelled) {
-          setStocks(list);
-        }
+        if (!cancelled) setStocks(list);
       })
       .catch(() => {
         if (!cancelled) setError('Gagal memuat daftar saham.');
@@ -248,11 +301,11 @@ export default function ComparePage() {
   useEffect(() => {
     const next = new URLSearchParams();
     if (activeTickersKey) next.set('tickers', activeTickersKey);
-    if (range !== '6B') next.set('range', range);
+    if (interval !== '1d') next.set('interval', interval);
     if (next.toString() !== searchParams.toString()) {
       setSearchParams(next, { replace: true });
     }
-  }, [activeTickersKey, range, searchParams, setSearchParams]);
+  }, [activeTickersKey, interval, searchParams, setSearchParams]);
 
   useEffect(() => {
     if (!activeTickersKey) {
@@ -266,7 +319,7 @@ export default function ComparePage() {
     setLoading(true);
     setError('');
 
-    compareStocks(activeTickersKey.split(','), range)
+    compareStocks(activeTickersKey.split(','), effectiveRange)
       .then((data) => {
         if (!cancelled) setCompared(data);
       })
@@ -283,7 +336,57 @@ export default function ComparePage() {
     return () => {
       cancelled = true;
     };
-  }, [activeTickersKey, range]);
+  }, [activeTickersKey, effectiveRange]);
+
+  const comparedIdsKey = useMemo(
+    () => compared.map((item) => item.stock?.stock_id).filter(Boolean).join(','),
+    [compared],
+  );
+
+  useEffect(() => {
+    if (!isIntraday || !comparedIdsKey) {
+      setIntradayMap({});
+      setIntradayError('');
+      setIntradayLoading(false);
+      return undefined;
+    }
+
+    let cancelled = false;
+    const ids = comparedIdsKey.split(',').map(Number).filter(Boolean);
+    setIntradayLoading(true);
+    setIntradayError('');
+
+    Promise.allSettled(ids.map((id) => getIntradayPrices(id, interval)))
+      .then((results) => {
+        if (cancelled) return;
+        const nextMap = {};
+        let failedCount = 0;
+
+        results.forEach((res, idx) => {
+          const stockId = ids[idx];
+          if (res.status === 'fulfilled') {
+            nextMap[stockId] = res.value?.candles || [];
+          } else {
+            nextMap[stockId] = [];
+            failedCount += 1;
+          }
+        });
+
+        setIntradayMap(nextMap);
+        if (failedCount === ids.length) {
+          setIntradayError('Gagal mengambil data intraday untuk interval ini.');
+        } else if (failedCount > 0) {
+          setIntradayError('Sebagian saham belum memiliki data intraday pada interval ini.');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setIntradayLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isIntraday, comparedIdsKey, interval]);
 
   const availablePresets = useMemo(() => {
     if (stocks.length === 0) return [];
@@ -320,12 +423,19 @@ export default function ComparePage() {
 
   const enriched = useMemo(
     () =>
-      compared.map((item, idx) => ({
-        ...item,
-        color: SERIES_COLORS[idx % SERIES_COLORS.length],
-        metrics: computeMetrics(item),
-      })),
-    [compared],
+      compared.map((item, idx) => {
+        const activePrices = isIntraday
+          ? intradayMap[item.stock.stock_id] || []
+          : aggregatePrices(item.prices, interval);
+        return {
+          ...item,
+          color: SERIES_COLORS[idx % SERIES_COLORS.length],
+          metrics: computeMetrics(item),
+          chartPrices: activePrices,
+          chartReturnPct: computeReturnPct(activePrices),
+        };
+      }),
+    [compared, isIntraday, intradayMap, interval],
   );
 
   const chartSeries = useMemo(
@@ -335,10 +445,12 @@ export default function ComparePage() {
         companyName: item.stock.company_name,
         currency: item.stock.currency || 'IDR',
         color: item.color,
-        prices: item.prices,
+        prices: item.chartPrices,
       })),
     [enriched],
   );
+
+  const periodLabel = isIntraday ? intervalMeta?.short || interval : effectiveRange;
 
   const quickHighlights = useMemo(() => {
     if (enriched.length < 2) return [];
@@ -352,8 +464,8 @@ export default function ComparePage() {
 
     return [
       {
-        title: `Performa Terbaik (${range})`,
-        winner: pickBest((e) => e.metrics.periodReturn, 'max'),
+        title: `Performa Terbaik (${periodLabel})`,
+        winner: pickBest((e) => (isIntraday ? e.chartReturnPct : e.metrics.periodReturn), 'max'),
         format: formatSignedPct,
       },
       {
@@ -372,14 +484,14 @@ export default function ComparePage() {
         format: formatPct,
       },
     ].filter((h) => h.winner !== null);
-  }, [enriched, range]);
+  }, [enriched, periodLabel, isIntraday]);
 
   const sections = useMemo(() => {
     if (enriched.length === 0) return [];
     return [
       {
         id: 'performance',
-        title: 'Performa & Risiko Harga',
+        title: `Performa & Risiko Harga (${effectiveRange})`,
         icon: BarChart3,
         rows: [
           {
@@ -398,7 +510,7 @@ export default function ComparePage() {
             ),
           },
           {
-            label: `Return Periode (${range})`,
+            label: `Return Periode (${effectiveRange})`,
             values: enriched.map((e) => e.metrics.periodReturn),
             bestMode: 'max',
             render: (v) => (
@@ -408,12 +520,12 @@ export default function ComparePage() {
             ),
           },
           {
-            label: `Tertinggi (${range})`,
+            label: `Tertinggi (${effectiveRange})`,
             values: enriched.map((e) => e.metrics.periodHigh),
             render: (v, e) => formatCurrency(v, e.stock.currency),
           },
           {
-            label: `Terendah (${range})`,
+            label: `Terendah (${effectiveRange})`,
             values: enriched.map((e) => e.metrics.periodLow),
             render: (v, e) => formatCurrency(v, e.stock.currency),
           },
@@ -425,7 +537,7 @@ export default function ComparePage() {
             render: (v) => formatPct(v),
           },
           {
-            label: `Max Drawdown (${range})`,
+            label: `Max Drawdown (${effectiveRange})`,
             values: enriched.map((e) => e.metrics.maxDrawdown),
             bestMode: 'max',
             render: (v) => (
@@ -439,7 +551,7 @@ export default function ComparePage() {
             render: (v) => formatVolume(v),
           },
           {
-            label: `Rata-rata Volume (${range})`,
+            label: `Rata-rata Volume (${effectiveRange})`,
             values: enriched.map((e) => e.metrics.avgVolume),
             bestMode: 'max',
             render: (v) => formatVolume(v),
@@ -632,7 +744,7 @@ export default function ComparePage() {
         ],
       },
     ];
-  }, [enriched, range]);
+  }, [enriched, effectiveRange]);
 
   return (
     <div className="mx-auto max-w-7xl space-y-6">
@@ -753,6 +865,7 @@ export default function ComparePage() {
               const { stock, metrics, color } = item;
               const isUp = (metrics.changePct ?? 0) > 0;
               const isDown = (metrics.changePct ?? 0) < 0;
+              const cardReturn = isIntraday ? item.chartReturnPct : metrics.periodReturn;
 
               return (
                 <div
@@ -804,17 +917,17 @@ export default function ComparePage() {
                     </div>
 
                     <div className="text-right">
-                      <p className="text-[11px] text-text-muted">Return {range}</p>
+                      <p className="text-[11px] text-text-muted">Return {periodLabel}</p>
                       <p
                         className={`num text-sm font-semibold ${
-                          (metrics.periodReturn ?? 0) > 0
+                          (cardReturn ?? 0) > 0
                             ? 'text-emerald-500'
-                            : (metrics.periodReturn ?? 0) < 0
+                            : (cardReturn ?? 0) < 0
                               ? 'text-rose-500'
                               : 'text-text'
                         }`}
                       >
-                        {formatSignedPct(metrics.periodReturn)}
+                        {isIntraday && intradayLoading ? '…' : formatSignedPct(cardReturn)}
                       </p>
                     </div>
                   </div>
@@ -824,17 +937,45 @@ export default function ComparePage() {
           </section>
 
           <section className="rounded-xl border border-border bg-surface p-4 sm:p-5">
-            <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <div>
                 <h2 className="text-sm font-semibold text-text">Grafik Perbandingan Harga</h2>
                 <p className="text-xs text-text-muted">
+                  Interval {intervalMeta?.label || interval} ·{' '}
                   {chartMode === 'pct'
                     ? 'Perubahan kumulatif (%) dimulai dari titik 0% pada awal rentang.'
-                    : 'Pergerakan harga penutupan nominal masing-masing emiten.'}
+                    : 'Pergerakan harga nominal masing-masing emiten.'}
                 </p>
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
+                <IntervalDropdown
+                  value={interval}
+                  onChange={setIntervalValue}
+                  disabled={loading}
+                />
+
+                <div className="inline-flex rounded-badges border border-border bg-surface-2 p-0.5">
+                  <button
+                    type="button"
+                    onClick={() => setChartType('candle')}
+                    className={`rounded-badges px-2.5 py-1 text-xs font-medium transition-colors ${
+                      chartType === 'candle' ? 'bg-accent text-accent-ink' : 'text-text-muted hover:text-text'
+                    }`}
+                  >
+                    Candle
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setChartType('line')}
+                    className={`rounded-badges px-2.5 py-1 text-xs font-medium transition-colors ${
+                      chartType === 'line' ? 'bg-accent text-accent-ink' : 'text-text-muted hover:text-text'
+                    }`}
+                  >
+                    Garis
+                  </button>
+                </div>
+
                 <div className="inline-flex rounded-badges border border-border bg-surface-2 p-0.5">
                   <button
                     type="button"
@@ -855,27 +996,27 @@ export default function ComparePage() {
                     Harga
                   </button>
                 </div>
-
-                <div className="inline-flex rounded-badges border border-border bg-surface-2 p-0.5">
-                  {RANGE_OPTIONS.map((opt) => (
-                    <button
-                      key={opt.value}
-                      type="button"
-                      onClick={() => setRange(opt.value)}
-                      className={`num rounded-badges px-2.5 py-1 text-xs font-medium transition-colors ${
-                        range === opt.value
-                          ? 'bg-accent text-accent-ink'
-                          : 'text-text-muted hover:text-text'
-                      }`}
-                    >
-                      {opt.label}
-                    </button>
-                  ))}
-                </div>
               </div>
             </div>
 
-            <CompareChart series={chartSeries} mode={chartMode} />
+            {intradayError && (
+              <div className="mb-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-600 dark:text-amber-400">
+                {intradayError}
+              </div>
+            )}
+
+            {isIntraday && intradayLoading ? (
+              <div className="flex h-[340px] items-center justify-center rounded-xl border border-border bg-surface-2/40 text-sm text-text-muted">
+                Memuat data intraday ({intervalMeta?.label || interval})…
+              </div>
+            ) : (
+              <CompareChart
+                series={chartSeries}
+                mode={chartMode}
+                chartType={chartType}
+                intraday={isIntraday}
+              />
+            )}
           </section>
 
           {quickHighlights.length > 0 && (
