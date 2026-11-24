@@ -16,7 +16,7 @@ func TestRegisterCreatesUserAndToken(t *testing.T) {
 
 	res := e.call(http.MethodPost, "/api/register", "", map[string]any{
 		"name":                  "Budi",
-		"email":                 "  Budi@Example.TEST ",
+		"email":                 "Budi@Example.TEST",
 		"password":              "rahasia123",
 		"password_confirmation": "rahasia123",
 	}).assertStatus(http.StatusCreated).

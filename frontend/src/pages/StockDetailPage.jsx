@@ -12,7 +12,7 @@ import WatchlistButton from '../components/WatchlistButton';
 import useAsync from '../hooks/useAsync';
 import useLiveQuote from '../hooks/useLiveQuote';
 import { getByTicker, loadStocks } from '../lib/stocksStore';
-import { getFundamentals, getIndicators, getNews, getPrices } from '../api/stocks';
+import { getFundamentals, getHourlyPrices, getIndicators, getNews, getPrices } from '../api/stocks';
 import { classifyPeriods, describeIndicators, summarizePrices } from '../lib/market';
 import { compact, date, dateTime, idr, number, pct, signed, toneOf } from '../lib/format';
 
@@ -134,13 +134,24 @@ function PriceHeader({ stock, prices, live }) {
 }
 
 function ChartTab({ stock, prices, timeframe, onTimeframeChange }) {
-  if (prices.loading) return <Skeleton className="h-100 rounded-cards" />;
-  if (prices.error) return <Card><ErrorState error={prices.error} onRetry={prices.reload} /></Card>;
-  if (!prices.data?.length) return <Card><EmptyState message="Data harga belum tersedia untuk saham ini." /></Card>;
+  const isHourly = timeframe === '1J';
+  const hourly = useAsync(
+    (opts) => getHourlyPrices(stock.stock_id, opts),
+    [stock.stock_id],
+    { enabled: isHourly },
+  );
+
+  const activeState = isHourly ? hourly : prices;
+
+  if (activeState.loading) return <Skeleton className="h-100 rounded-cards" />;
+  if (activeState.error) return <Card><ErrorState error={activeState.error} onRetry={activeState.reload} /></Card>;
+  if (!activeState.data?.length) return <Card><EmptyState message="Data harga belum tersedia untuk saham ini." /></Card>;
+
   return (
     <StockChart
       key={stock.stock_id}
-      prices={prices.data}
+      ticker={stock.ticker}
+      prices={activeState.data}
       timeframe={timeframe}
       onTimeframeChange={onTimeframeChange}
       index={isIndex(stock)}

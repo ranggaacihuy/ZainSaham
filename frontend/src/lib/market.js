@@ -35,6 +35,7 @@ function monthBucket(months) {
 }
 
 export const TIMEFRAMES = [
+  { value: '1J', label: '1J', title: '1 jam', intraday: true },
   { value: '1H', label: '1H', title: '1 hari', bucket: (dateKey) => dateKey },
   { value: '1Mg', label: '1Mg', title: '1 minggu', bucket: weekStart },
   { value: '1B', label: '1B', title: '1 bulan', bucket: monthBucket(1) },
@@ -45,8 +46,8 @@ export const TIMEFRAMES = [
 
 export function aggregatePrices(prices, timeframe) {
   if (!Array.isArray(prices)) return [];
-  const option = TIMEFRAMES.find((t) => t.value === timeframe) || TIMEFRAMES[0];
-  if (option === TIMEFRAMES[0]) return prices;
+  const option = TIMEFRAMES.find((t) => t.value === timeframe) || TIMEFRAMES[1];
+  if (option.intraday || option.value === '1H') return prices;
 
   const bars = [];
   let key = null;

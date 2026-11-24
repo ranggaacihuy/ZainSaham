@@ -42,6 +42,11 @@ type cachedQuote struct {
 	expires time.Time
 }
 
+type cachedHourly struct {
+	candles []IntradayCandle
+	expires time.Time
+}
+
 type SyncOptions struct {
 	Tickers      []string
 	Range        string
@@ -59,6 +64,7 @@ type Service struct {
 	now      func() time.Time
 	mu       sync.Mutex
 	quotes   map[uint]cachedQuote
+	hourly   map[uint]cachedHourly
 	group    singleflight.Group
 }
 
@@ -71,6 +77,7 @@ func NewService(db *gorm.DB, yahoo config.Yahoo, news config.News) *Service {
 		delay:    yahoo.Delay,
 		now:      time.Now,
 		quotes:   map[uint]cachedQuote{},
+		hourly:   map[uint]cachedHourly{},
 	}
 }
 
@@ -217,6 +224,37 @@ func (s *Service) Quote(ctx context.Context, stock *models.Stock) (*Quote, error
 	}
 
 	return value.(*Quote), nil
+}
+
+func (s *Service) Hourly(ctx context.Context, stock *models.Stock) ([]IntradayCandle, error) {
+	s.mu.Lock()
+	cached, ok := s.hourly[stock.StockID]
+	s.mu.Unlock()
+
+	if ok && s.now().Before(cached.expires) {
+		return cached.candles, nil
+	}
+
+	value, err, _ := s.group.Do(fmt.Sprintf("hourly:%d", stock.StockID), func() (any, error) {
+		candles, err := s.yahoo.FetchHourly(ctx, stock.MarketCode(), "1mo")
+		if err != nil {
+			return nil, err
+		}
+
+		s.mu.Lock()
+		if s.hourly == nil {
+			s.hourly = map[uint]cachedHourly{}
+		}
+		s.hourly[stock.StockID] = cachedHourly{candles: candles, expires: s.now().Add(2 * time.Minute)}
+		s.mu.Unlock()
+
+		return candles, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return value.([]IntradayCandle), nil
 }
 
 func (s *Service) buildQuote(stock *models.Stock, chart *Chart) *Quote {

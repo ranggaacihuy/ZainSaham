@@ -1,5 +1,5 @@
 import { ColorType, CrosshairMode, LineStyle, createChart } from 'lightweight-charts';
-import { compact, date, number } from './format';
+import { compact, date, dateTime, number } from './format';
 
 function token(name) {
   return getComputedStyle(document.documentElement).getPropertyValue(`--color-${name}`).trim();
@@ -58,6 +58,10 @@ export function createThemedChart(container, colors) {
   return createChart(container, {
     autoSize: true,
     ...chartThemeOptions(colors),
+    localization: {
+      locale: 'id-ID',
+      timeFormatter: (time) => (typeof time === 'number' ? dateTime(new Date(time * 1000)) : date(timeKey(time))),
+    },
     rightPriceScale: { borderVisible: false, minimumWidth: 64 },
     timeScale: {
       borderVisible: false,

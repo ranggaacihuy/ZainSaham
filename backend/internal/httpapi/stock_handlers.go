@@ -152,6 +152,20 @@ func (s *Server) stockPrices(c *gin.Context) {
 		return
 	}
 
+	if c.Query("interval") == "1h" {
+		stock, found := s.findStock(c, id)
+		if !found {
+			return
+		}
+		candles, err := s.market.Hourly(c.Request.Context(), stock)
+		if err != nil {
+			fail(c, http.StatusBadGateway, "Gagal mengambil data harga per jam.")
+			return
+		}
+		ok(c, candles)
+		return
+	}
+
 	cutoff, valid := s.rangeCutoff(c, id)
 	if !valid {
 		return

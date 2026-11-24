@@ -274,3 +274,104 @@ func deref(value *float64) float64 {
 
 	return *value
 }
+
+type IntradayCandle struct {
+	Timestamp  int64   `json:"timestamp"`
+	PriceDate  string  `json:"price_date"`
+	OpenPrice  float64 `json:"open_price"`
+	HighPrice  float64 `json:"high_price"`
+	LowPrice   float64 `json:"low_price"`
+	ClosePrice float64 `json:"close_price"`
+	Volume     int64   `json:"volume"`
+}
+
+func (y *Yahoo) FetchHourly(ctx context.Context, ticker, dataRange string) ([]IntradayCandle, error) {
+	if dataRange == "" {
+		dataRange = "1mo"
+	}
+
+	symbol := y.Symbol(ticker)
+	endpoint := fmt.Sprintf("%s/v8/finance/chart/%s?%s", y.baseURL, url.PathEscape(symbol), url.Values{
+		"range":    {dataRange},
+		"interval": {"1h"},
+	}.Encode())
+
+	status, raw, err := y.getWithRetry(ctx, endpoint)
+	if err != nil {
+		return nil, fmt.Errorf("Yahoo Finance gagal untuk %s: %w", symbol, err)
+	}
+	if status == http.StatusNotFound {
+		return nil, fmt.Errorf("Kode saham %s tidak dikenali Yahoo Finance.", symbol)
+	}
+	if status >= http.StatusBadRequest {
+		return nil, fmt.Errorf("Yahoo Finance gagal untuk %s: HTTP %d", symbol, status)
+	}
+
+	return parseIntraday(symbol, raw)
+}
+
+func parseIntraday(symbol string, raw []byte) ([]IntradayCandle, error) {
+	var payload struct {
+		Chart struct {
+			Result []struct {
+				Meta       Meta    `json:"meta"`
+				Timestamp  []int64 `json:"timestamp"`
+				Indicators struct {
+					Quote []struct {
+						Open   []*float64 `json:"open"`
+						High   []*float64 `json:"high"`
+						Low    []*float64 `json:"low"`
+						Close  []*float64 `json:"close"`
+						Volume []*float64 `json:"volume"`
+					} `json:"quote"`
+				} `json:"indicators"`
+			} `json:"result"`
+			Error *struct {
+				Description string `json:"description"`
+			} `json:"error"`
+		} `json:"chart"`
+	}
+
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		return nil, fmt.Errorf("Yahoo Finance gagal untuk %s: respons tidak dapat dibaca", symbol)
+	}
+	if len(payload.Chart.Result) == 0 {
+		reason := "respons kosong"
+		if payload.Chart.Error != nil && payload.Chart.Error.Description != "" {
+			reason = payload.Chart.Error.Description
+		}
+		return nil, fmt.Errorf("Yahoo Finance gagal untuk %s: %s", symbol, reason)
+	}
+
+	result := payload.Chart.Result[0]
+	location := result.Meta.Location()
+	byTime := map[int64]IntradayCandle{}
+
+	if len(result.Indicators.Quote) > 0 {
+		quote := result.Indicators.Quote[0]
+		for i, ts := range result.Timestamp {
+			open, high, low, closeVal, volume := at(quote.Open, i), at(quote.High, i), at(quote.Low, i), at(quote.Close, i), at(quote.Volume, i)
+			if open == nil || high == nil || low == nil || closeVal == nil {
+				continue
+			}
+
+			byTime[ts] = IntradayCandle{
+				Timestamp:  ts,
+				PriceDate:  time.Unix(ts, 0).In(location).Format(time.RFC3339),
+				OpenPrice:  round2(*open),
+				HighPrice:  round2(*high),
+				LowPrice:   round2(*low),
+				ClosePrice: round2(*closeVal),
+				Volume:     int64(deref(volume)),
+			}
+		}
+	}
+
+	candles := make([]IntradayCandle, 0, len(byTime))
+	for _, c := range byTime {
+		candles = append(candles, c)
+	}
+	sort.Slice(candles, func(i, j int) bool { return candles[i].Timestamp < candles[j].Timestamp })
+
+	return candles, nil
+}
