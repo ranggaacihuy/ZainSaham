@@ -12,7 +12,7 @@ import (
 type registerRequest struct {
 	Name                 string `json:"name" binding:"required,max=100"`
 	Email                string `json:"email" binding:"required,email,max=150"`
-	Password             string `json:"password" binding:"required,min=8"`
+	Password 			 string `json:"password" binding:"required,min=8,max=72,strong_password"`
 	PasswordConfirmation string `json:"password_confirmation" binding:"required,eqfield=Password"`
 }
 

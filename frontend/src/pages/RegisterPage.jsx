@@ -5,6 +5,7 @@ import { Button, Field, Input } from '../components/ui';
 import AuthLayout from '../components/AuthLayout';
 import { useAuth } from '../context/AuthContext';
 import { fieldError } from '../api/client';
+import PasswordStrength, { validatePassword } from '../components/PasswordStrength';
 
 export default function RegisterPage() {
   const { register } = useAuth();
@@ -16,13 +17,24 @@ export default function RegisterPage() {
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
 
+  const passwordMismatch =
+    passwordConfirmation.length > 0 && password !== passwordConfirmation;
+
   const onSubmit = async (event) => {
     event.preventDefault();
     setError(null);
+
+    const passwordCheck = validatePassword(password);
+    if (!passwordCheck.isValid) {
+      setError({ message: passwordCheck.errorMessage });
+      return;
+    }
+
     if (password !== passwordConfirmation) {
       setError({ message: 'Konfirmasi kata sandi tidak cocok.' });
       return;
     }
+
     setLoading(true);
     try {
       await register(name, email, password, passwordConfirmation);
@@ -75,32 +87,42 @@ export default function RegisterPage() {
           />
         </Field>
 
-        <div className="grid gap-5 sm:grid-cols-2">
-          <Field label="Kata sandi" htmlFor="register-password" error={fieldError(error, 'password')}>
-            <Input
-              id="register-password"
-              type="password"
-              required
-              minLength={8}
-              autoComplete="new-password"
-              className="h-12 text-body-sm"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
-          </Field>
+        <div className="space-y-3">
+          <div className="grid gap-5 sm:grid-cols-2">
+            <Field label="Kata sandi" htmlFor="register-password" error={fieldError(error, 'password')}>
+              <Input
+                id="register-password"
+                type="password"
+                required
+                minLength={8}
+                maxLength={72}
+                autoComplete="new-password"
+                className="h-12 text-body-sm"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+            </Field>
 
-          <Field label="Konfirmasi kata sandi" htmlFor="register-password-confirm">
-            <Input
-              id="register-password-confirm"
-              type="password"
-              required
-              minLength={8}
-              autoComplete="new-password"
-              className="h-12 text-body-sm"
-              value={passwordConfirmation}
-              onChange={(e) => setPasswordConfirmation(e.target.value)}
-            />
-          </Field>
+            <Field
+              label="Konfirmasi kata sandi"
+              htmlFor="register-password-confirm"
+              error={passwordMismatch ? 'Konfirmasi kata sandi tidak cocok.' : undefined}
+            >
+              <Input
+                id="register-password-confirm"
+                type="password"
+                required
+                minLength={8}
+                maxLength={72}
+                autoComplete="new-password"
+                className="h-12 text-body-sm"
+                value={passwordConfirmation}
+                onChange={(e) => setPasswordConfirmation(e.target.value)}
+              />
+            </Field>
+          </div>
+
+          <PasswordStrength password={password} />
         </div>
 
         <Button type="submit" variant="primary" size="lg" className="mt-2 w-full" disabled={loading}>

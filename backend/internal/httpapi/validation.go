@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"strings"
 	"sync"
+	"unicode"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gin-gonic/gin/binding"
@@ -30,6 +31,16 @@ var (
 		"analysis_type":         "Jenis analisis",
 		"message":               "Pesan",
 	}
+	weakPasswordPatterns = []string{
+		"123456",
+		"12345678",
+		"password",
+		"qwerty",
+		"admin123",
+		"zainsaham",
+		"letmein",
+		"welcome",
+	}
 )
 
 func registerValidation() {
@@ -43,8 +54,64 @@ func registerValidation() {
 
 				return name
 			})
+
+			_ = engine.RegisterValidation("strong_password", func(fl validator.FieldLevel) bool {
+				return validateStrongPassword(fl.Field().String()) == nil
+			})
 		}
 	})
+}
+
+func validateStrongPassword(password string) error {
+	runes := []rune(password)
+	if len(runes) < 8 {
+		return errors.New("Kata sandi minimal 8 karakter.")
+	}
+	if len(runes) > 72 {
+		return errors.New("Kata sandi maksimal 72 karakter.")
+	}
+
+	var hasUpper, hasLower, hasDigit, hasSymbol bool
+	repeatCount := 1
+
+	for i, r := range runes {
+		if unicode.IsSpace(r) {
+			return errors.New("Kata sandi tidak boleh mengandung spasi.")
+		}
+
+		switch {
+		case unicode.IsUpper(r):
+			hasUpper = true
+		case unicode.IsLower(r):
+			hasLower = true
+		case unicode.IsDigit(r):
+			hasDigit = true
+		case unicode.IsPunct(r) || unicode.IsSymbol(r):
+			hasSymbol = true
+		}
+
+		if i > 0 && r == runes[i-1] {
+			repeatCount++
+			if repeatCount >= 4 {
+				return errors.New("Kata sandi tidak boleh mengulang karakter yang sama 4 kali berturut-turut.")
+			}
+		} else {
+			repeatCount = 1
+		}
+	}
+
+	if !hasUpper || !hasLower || !hasDigit || !hasSymbol {
+		return errors.New("Kata sandi harus mengandung huruf besar, huruf kecil, angka, dan simbol (contoh: R4ngga17!).")
+	}
+
+	lower := strings.ToLower(password)
+	for _, weak := range weakPasswordPatterns {
+		if strings.Contains(lower, weak) {
+			return errors.New("Kata sandi terlalu umum dan mudah ditebak.")
+		}
+	}
+
+	return nil
 }
 
 func bind(c *gin.Context, target any) bool {
@@ -129,6 +196,13 @@ func validationMessage(fieldErr validator.FieldError) (string, string) {
 		return field, fmt.Sprintf("%s minimal %s karakter.", name, fieldErr.Param())
 	case "max":
 		return field, fmt.Sprintf("%s maksimal %s karakter.", name, fieldErr.Param())
+	case "strong_password":
+		if val, ok := fieldErr.Value().(string); ok {
+			if err := validateStrongPassword(val); err != nil {
+				return field, err.Error()
+			}
+		}
+		return field, "Kata sandi harus mengandung huruf besar, huruf kecil, angka, dan simbol (contoh: R4ngga17!)."
 	default:
 		return field, name + " tidak valid."
 	}
