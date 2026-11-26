@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { Logo } from './ui/Logo';
-import heroImage from '../assets/hero.jpg';
+import AuthChartBackground from './AuthChartBackground';
 
 const CURRENT_YEAR = new Date().getFullYear();
 
@@ -24,8 +24,8 @@ export default function AuthLayout({ eyebrow, title, description, switchText, sw
         </header>
 
         {/* Ilustrasi ringkas untuk layar kecil */}
-        <div className="relative mt-6 h-36 overflow-hidden rounded-images sm:h-44 lg:hidden" aria-hidden="true">
-          <img src={heroImage} alt="" className="h-full w-full object-cover object-center" />
+        <div className="relative mt-6 h-36 overflow-hidden rounded-images bg-obsidian sm:h-44 lg:hidden" aria-hidden="true">
+          <AuthChartBackground accent="monochrome" compact />
         </div>
 
         <main className="mx-auto flex w-full max-w-100 flex-1 flex-col justify-center py-10 lg:py-16">
@@ -59,10 +59,10 @@ export default function AuthLayout({ eyebrow, title, description, switchText, sw
       </div>
 
       {/* Panel ilustrasi (desktop) */}
-      <aside className="relative hidden overflow-hidden rounded-images lg:block" aria-hidden="true">
-        <img src={heroImage} alt="" className="absolute inset-0 h-full w-full object-cover object-center" />
-        <div className="relative flex h-full flex-col items-center px-10 pt-20 text-center xl:pt-24">
-          <span className="inline-flex h-7 items-center rounded-badges border border-pure/20 bg-obsidian/80 px-3 text-micro font-medium text-pure">
+      <aside className="relative hidden overflow-hidden rounded-images bg-obsidian lg:block" aria-hidden="true">
+        <AuthChartBackground accent="monochrome" />
+        <div className="relative z-10 flex h-full flex-col items-center px-10 pt-20 text-center xl:pt-24">
+          <span className="inline-flex h-7 items-center rounded-badges border border-pure/20 bg-obsidian/80 px-3 text-micro font-medium text-pure backdrop-blur-sm">
             Saham Bursa Efek Indonesia
           </span>
           <p className="mt-6 max-w-xl text-heading-lg font-medium text-pure xl:text-display">
