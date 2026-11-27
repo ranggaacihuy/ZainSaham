@@ -275,12 +275,22 @@ export default function StockDetailPage() {
     setPrices((prev) => mergePrice(prev, price));
   });
 
+const [slideDir, setSlideDir] = useState(null);
+
   const setTab = (value) => {
+    const fromIdx = tabs.findIndex((t) => t.value === tab);
+    const toIdx = tabs.findIndex((t) => t.value === value);
+    if (fromIdx !== -1 && toIdx !== -1 && fromIdx !== toIdx) {
+      setSlideDir(toIdx > fromIdx ? 'right' : 'left');
+    }
+
     const next = new URLSearchParams(searchParams);
     if (value === 'grafik') next.delete('tab');
     else next.set('tab', value);
     setSearchParams(next, { replace: true });
   };
+
+  
 
   const backLink = (
     <Link to="/stocks" className="mb-4 inline-flex items-center gap-1 text-sm text-text-muted transition-colors duration-150 hover:text-text">
@@ -328,7 +338,19 @@ export default function StockDetailPage() {
 
       <Tabs items={tabs} value={tab} onChange={setTab} label="Bagian detail saham" className="mb-4" />
 
-      <div role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`}>
+      <div
+        key={tab}
+        role="tabpanel"
+        id={`panel-${tab}`}
+        aria-labelledby={`tab-${tab}`}
+        className={
+          slideDir === 'right'
+            ? 'animate-tab-from-right'
+            : slideDir === 'left'
+              ? 'animate-tab-from-left'
+              : ''
+        }
+      >
         {tab === 'grafik' && <ChartTab stock={stock} prices={prices} />}
         {tab === 'teknikal' && <TechnicalTab stock={stock} prices={prices} />}
         {tab === 'fundamental' && <FundamentalTab stockId={stock.stock_id} />}

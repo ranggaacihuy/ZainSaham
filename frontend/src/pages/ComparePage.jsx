@@ -15,10 +15,21 @@ import CompareChart from '../components/CompareChart';
 import IntervalDropdown from '../components/IntervalDropdown';
 import StockLogo from '../components/StockLogo';
 import StockSelectDropdown from '../components/StockSelectDropdown';
+import { Tabs } from '../components/ui';
 import { getIntervalMeta } from '../lib/market';
 
 const MAX_SLOTS = 3;
 const SERIES_COLORS = ['#6366f1', '#10b981', '#f59e0b'];
+
+const CHART_TYPE_TABS = [
+  { value: 'candle', label: 'Candle' },
+  { value: 'line', label: 'Garis' },
+];
+
+const CHART_MODE_TABS = [
+  { value: 'pct', label: 'Relatif (%)' },
+  { value: 'price', label: 'Harga' },
+];
 
 const DEFAULT_PRESETS = [
   { label: 'Bank Big Caps', tickers: ['BBCA', 'BBRI', 'BMRI'] },
@@ -748,7 +759,7 @@ export default function ComparePage() {
 
   return (
     <div className="mx-auto max-w-7xl space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+      <div className="animate-fade-up flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <div className="flex items-center gap-2 text-text">
             <Scale className="h-5 w-5 text-text-muted" strokeWidth={1.75} aria-hidden="true" />
@@ -763,15 +774,18 @@ export default function ComparePage() {
           <button
             type="button"
             onClick={clearAll}
-            className="inline-flex h-9 items-center gap-1.5 self-start rounded-badges border border-border bg-surface px-3.5 text-xs font-medium text-text-muted transition-colors hover:bg-surface-2 hover:text-text sm:self-auto"
+            className="animate-dropdown-in group inline-flex h-9 items-center gap-1.5 self-start rounded-badges border border-border bg-surface px-3.5 text-xs font-medium text-text-muted transition-all duration-150 hover:border-border-strong hover:bg-surface-2 hover:text-text active:scale-95 sm:self-auto"
           >
-            <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
+            <RotateCcw className="h-3.5 w-3.5 transition-transform duration-300 group-hover:-rotate-90" aria-hidden="true" />
             Reset Pilihan
           </button>
         )}
       </div>
 
-      <section className="rounded-xl border border-border bg-surface p-4 sm:p-5">
+      <section
+        style={{ animationDelay: '50ms' }}
+        className="animate-fade-up relative z-20 rounded-xl border border-border bg-surface p-4 sm:p-5"
+      >
         <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
           {slots.map((slotValue, idx) => {
             const otherSelected = new Set(slots.filter((v, i) => i !== idx && v));
@@ -782,7 +796,9 @@ export default function ComparePage() {
                 <div className="flex items-center justify-between">
                   <label htmlFor={`compare-slot-${idx}`} className="flex items-center gap-2 text-xs font-medium text-text-muted">
                     <span
-                      className="h-2.5 w-2.5 rounded-full"
+                      className={`h-2.5 w-2.5 rounded-full transition-transform duration-200 ${
+                        slotValue ? 'scale-110' : 'opacity-60'
+                      }`}
                       style={{ backgroundColor: SERIES_COLORS[idx] }}
                       aria-hidden="true"
                     />
@@ -793,7 +809,7 @@ export default function ComparePage() {
                       type="button"
                       onClick={() => updateSlot(idx, '')}
                       aria-label={`Hapus saham ${idx + 1}`}
-                      className="inline-flex items-center gap-0.5 text-[11px] text-text-muted transition-colors hover:text-text"
+                      className="animate-dropdown-in inline-flex items-center gap-0.5 text-[11px] text-text-muted transition-colors hover:text-text"
                     >
                       <X className="h-3 w-3" aria-hidden="true" />
                       Hapus
@@ -817,36 +833,57 @@ export default function ComparePage() {
         {availablePresets.length > 0 && (
           <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-border pt-3.5">
             <span className="text-xs text-text-muted">Preset cepat:</span>
-            {availablePresets.map((preset) => (
-              <button
-                key={preset.label}
-                type="button"
-                onClick={() => applyPreset(preset.tickers)}
-                className="rounded-badges border border-border bg-surface-2 px-3 py-1 text-xs font-medium text-text transition-colors hover:border-border-strong hover:bg-bg"
-              >
-                {preset.label}{' '}
-                <span className="num text-text-muted">({preset.tickers.join(' · ')})</span>
-              </button>
-            ))}
+            {availablePresets.map((preset) => {
+              const isPresetActive =
+                preset.tickers.length === activeTickers.length &&
+                preset.tickers.every((t, i) => activeTickers[i] === t);
+
+              return (
+                <button
+                  key={preset.label}
+                  type="button"
+                  onClick={() => applyPreset(preset.tickers)}
+                  className={`rounded-badges border px-3 py-1 text-xs font-medium transition-all duration-150 active:scale-95 ${
+                    isPresetActive
+                      ? 'border-accent bg-accent text-accent-ink'
+                      : 'border-border bg-surface-2 text-text hover:border-border-strong hover:bg-bg'
+                  }`}
+                >
+                  {preset.label}{' '}
+                  <span className={`num ${isPresetActive ? 'opacity-75' : 'text-text-muted'}`}>
+                    ({preset.tickers.join(' · ')})
+                  </span>
+                </button>
+              );
+            })}
           </div>
         )}
       </section>
 
       {error && (
-        <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-500">
+        <div className="animate-fade-up rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-500">
           {error}
         </div>
       )}
 
       {activeTickers.length === 0 ? (
-        <section className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border bg-surface px-6 py-16 text-center">
-          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-surface-2 text-text-muted">
-            <Scale className="h-6 w-6" strokeWidth={1.75} aria-hidden="true" />
+        <section
+          style={{ animationDelay: '100ms' }}
+          className="animate-fade-up relative flex flex-col items-center justify-center overflow-hidden rounded-xl border border-dashed border-border bg-surface px-6 py-16 text-center"
+        >
+          <div
+            className="pointer-events-none absolute inset-0 bg-dot-grid opacity-40 mask-radial-fade dark:opacity-20"
+            aria-hidden="true"
+          />
+          <div className="relative z-10 flex flex-col items-center">
+            <div className="flex h-12 w-12 items-center justify-center rounded-full border border-border bg-surface-2 text-text-muted transition-transform duration-300 hover:scale-105">
+              <Scale className="h-6 w-6" strokeWidth={1.75} aria-hidden="true" />
+            </div>
+            <h2 className="mt-4 text-base font-semibold text-text">Pilih Saham untuk Mulai Membandingkan</h2>
+            <p className="mt-1 max-w-md text-sm text-text-muted">
+              Pilih minimal 2 saham (maksimal 3) pada kolom di atas atau gunakan preset cepat untuk melihat perbandingan grafik dan metrik.
+            </p>
           </div>
-          <h2 className="mt-4 text-base font-semibold text-text">Pilih Saham untuk Mulai Membandingkan</h2>
-          <p className="mt-1 max-w-md text-sm text-text-muted">
-            Pilih minimal 2 saham (maksimal 3) pada kolom di atas atau gunakan preset cepat untuk melihat perbandingan grafik dan metrik.
-          </p>
         </section>
       ) : loading ? (
         <div className="space-y-4">
@@ -861,7 +898,7 @@ export default function ComparePage() {
       ) : (
         <>
           <section className="grid grid-cols-1 gap-4 md:grid-cols-3">
-            {enriched.map((item) => {
+            {enriched.map((item, idx) => {
               const { stock, metrics, color } = item;
               const isUp = (metrics.changePct ?? 0) > 0;
               const isDown = (metrics.changePct ?? 0) < 0;
@@ -870,16 +907,25 @@ export default function ComparePage() {
               return (
                 <div
                   key={stock.stock_id}
-                  className="relative overflow-hidden rounded-xl border border-border bg-surface p-4 transition-colors hover:border-border-strong"
+                  style={{ animationDelay: `${idx * 65}ms` }}
+                  className="animate-fade-up group relative overflow-hidden rounded-xl border border-border bg-surface p-4 transition-all duration-200 hover:-translate-y-0.5 hover:border-border-strong"
                 >
                   <div
                     className="absolute inset-x-0 top-0 h-1"
                     style={{ backgroundColor: color }}
                     aria-hidden="true"
                   />
-                  <div className="flex items-start justify-between gap-3">
+                  <div
+                    className="pointer-events-none absolute inset-0"
+                    style={{ background: `linear-gradient(180deg, ${color}12 0%, transparent 55%)` }}
+                    aria-hidden="true"
+                  />
+
+                  <div className="relative z-10 flex items-start justify-between gap-3">
                     <div className="flex min-w-0 items-center gap-2.5">
-                      <StockLogo ticker={stock.ticker} size={36} />
+                      <span className="transition-transform duration-200 group-hover:scale-105">
+                        <StockLogo ticker={stock.ticker} size={36} />
+                      </span>
                       <div className="min-w-0">
                         <div className="flex items-center gap-1.5">
                           <span className="num text-base font-semibold text-text">{stock.ticker}</span>
@@ -896,13 +942,16 @@ export default function ComparePage() {
                     <Link
                       to={`/stocks/${stock.ticker}`}
                       title={`Buka detail ${stock.ticker}`}
-                      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-badges border border-border bg-surface-2 text-text-muted transition-colors hover:text-text"
+                      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-badges border border-border bg-surface-2 text-text-muted transition-all duration-150 hover:border-border-strong hover:text-text"
                     >
-                      <ArrowUpRight className="h-3.5 w-3.5" aria-hidden="true" />
+                      <ArrowUpRight
+                        className="h-3.5 w-3.5 transition-transform duration-150 group-hover:translate-x-0.5 group-hover:-translate-y-0.5"
+                        aria-hidden="true"
+                      />
                     </Link>
                   </div>
 
-                  <div className="mt-4 flex items-end justify-between gap-2">
+                  <div className="relative z-10 mt-4 flex items-end justify-between gap-2">
                     <div>
                       <p className="num text-xl font-semibold text-text">
                         {formatCurrency(metrics.lastClose, stock.currency)}
@@ -936,7 +985,10 @@ export default function ComparePage() {
             })}
           </section>
 
-          <section className="rounded-xl border border-border bg-surface p-4 sm:p-5">
+          <section
+            style={{ animationDelay: '120ms' }}
+            className="animate-fade-up relative z-10 rounded-xl border border-border bg-surface p-4 sm:p-5"
+          >
             <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <div>
                 <h2 className="text-sm font-semibold text-text">Grafik Perbandingan Harga</h2>
@@ -955,47 +1007,23 @@ export default function ComparePage() {
                   disabled={loading}
                 />
 
-                <div className="inline-flex rounded-badges border border-border bg-surface-2 p-0.5">
-                  <button
-                    type="button"
-                    onClick={() => setChartType('candle')}
-                    className={`rounded-badges px-2.5 py-1 text-xs font-medium transition-colors ${
-                      chartType === 'candle' ? 'bg-accent text-accent-ink' : 'text-text-muted hover:text-text'
-                    }`}
-                  >
-                    Candle
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setChartType('line')}
-                    className={`rounded-badges px-2.5 py-1 text-xs font-medium transition-colors ${
-                      chartType === 'line' ? 'bg-accent text-accent-ink' : 'text-text-muted hover:text-text'
-                    }`}
-                  >
-                    Garis
-                  </button>
-                </div>
+                <Tabs
+                  variant="segmented"
+                  size="sm"
+                  label="Tipe grafik"
+                  items={CHART_TYPE_TABS}
+                  value={chartType}
+                  onChange={setChartType}
+                />
 
-                <div className="inline-flex rounded-badges border border-border bg-surface-2 p-0.5">
-                  <button
-                    type="button"
-                    onClick={() => setChartMode('pct')}
-                    className={`rounded-badges px-2.5 py-1 text-xs font-medium transition-colors ${
-                      chartMode === 'pct' ? 'bg-accent text-accent-ink' : 'text-text-muted hover:text-text'
-                    }`}
-                  >
-                    Relatif (%)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setChartMode('price')}
-                    className={`rounded-badges px-2.5 py-1 text-xs font-medium transition-colors ${
-                      chartMode === 'price' ? 'bg-accent text-accent-ink' : 'text-text-muted hover:text-text'
-                    }`}
-                  >
-                    Harga
-                  </button>
-                </div>
+                <Tabs
+                  variant="segmented"
+                  size="sm"
+                  label="Mode perbandingan grafik"
+                  items={CHART_MODE_TABS}
+                  value={chartMode}
+                  onChange={setChartMode}
+                />
               </div>
             </div>
 
@@ -1021,14 +1049,18 @@ export default function ComparePage() {
 
           {quickHighlights.length > 0 && (
             <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              {quickHighlights.map((h) => (
+              {quickHighlights.map((h, idx) => (
                 <div
                   key={h.title}
-                  className="flex items-center justify-between gap-3 rounded-xl border border-border bg-surface p-3.5"
+                  style={{ animationDelay: `${160 + idx * 45}ms` }}
+                  className="animate-fade-up group flex items-center justify-between gap-3 rounded-xl border border-border bg-surface p-3.5 transition-all duration-200 hover:-translate-y-0.5 hover:border-border-strong"
                 >
                   <div className="min-w-0">
                     <p className="flex items-center gap-1.5 text-[11px] font-medium text-text-muted">
-                      <Trophy className="h-3.5 w-3.5 text-amber-500" aria-hidden="true" />
+                      <Trophy
+                        className="h-3.5 w-3.5 text-amber-500 transition-transform duration-200 group-hover:scale-110"
+                        aria-hidden="true"
+                      />
                       {h.title}
                     </p>
                     <div className="mt-1.5 flex items-center gap-2">
@@ -1050,12 +1082,13 @@ export default function ComparePage() {
           )}
 
           <div className="space-y-5">
-            {sections.map((section) => {
+            {sections.map((section, sectionIdx) => {
               const Icon = section.icon;
               return (
                 <section
                   key={section.id}
-                  className="overflow-hidden rounded-xl border border-border bg-surface"
+                  style={{ animationDelay: `${220 + sectionIdx * 70}ms` }}
+                  className="animate-fade-up overflow-hidden rounded-xl border border-border bg-surface"
                 >
                   <div className="flex items-center gap-2 border-b border-border bg-surface-2/50 px-4 py-3">
                     <Icon className="h-4 w-4 text-text-muted" strokeWidth={1.75} aria-hidden="true" />
@@ -1084,7 +1117,7 @@ export default function ComparePage() {
                         {section.rows.map((row) => {
                           const bestSet = getBestIndices(row.values, row.bestMode, row.bestOpts);
                           return (
-                            <tr key={row.label} className="transition-colors hover:bg-surface-2/40">
+                            <tr key={row.label} className="transition-colors duration-150 hover:bg-surface-2/50">
                               <td className="px-4 py-2.5 text-xs font-medium text-text-muted sm:text-sm">
                                 {row.label}
                               </td>
@@ -1094,7 +1127,7 @@ export default function ComparePage() {
                                 return (
                                   <td
                                     key={item.stock.stock_id}
-                                    className={`num px-4 py-2.5 text-right text-xs sm:text-sm ${
+                                    className={`num px-4 py-2.5 text-right text-xs transition-colors duration-150 sm:text-sm ${
                                       isBest ? 'bg-emerald-500/[0.06] font-semibold text-text' : 'text-text'
                                     }`}
                                   >
