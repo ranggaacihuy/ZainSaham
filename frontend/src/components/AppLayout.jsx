@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { Bookmark, History, LayoutDashboard, LineChart, LogOut, MessageSquareText, Moon, Scale, Sun } from 'lucide-react';
 import { displayName, useAuth } from '../context/AuthContext';
@@ -49,6 +49,11 @@ export default function AppLayout() {
   const location = useLocation();
   const navigate = useNavigate();
 
+  const activeIndex = NAV_ITEMS.findIndex((item) => isActive(item, location.pathname));
+  const navRef = useRef(null);
+  const itemRefs = useRef([]);
+  const [pill, setPill] = useState({ left: 0, width: 0, visible: false, ready: false });
+
   const onLogout = async () => {
     await logout();
     navigate('/login', { replace: true });
@@ -58,8 +63,49 @@ export default function AppLayout() {
     window.scrollTo(0, 0);
   }, [location.pathname]);
 
+  useLayoutEffect(() => {
+    const navEl = navRef.current;
+    const activeEl = itemRefs.current[activeIndex];
+
+    if (activeIndex === -1 || !navEl || !activeEl) {
+      setPill((prev) => ({ ...prev, visible: false, ready: false }));
+      return;
+    }
+
+    const update = () => {
+      const navRect = navEl.getBoundingClientRect();
+      const elRect = activeEl.getBoundingClientRect();
+      if (elRect.width === 0) return;
+
+      setPill((prev) => ({
+        left: elRect.left - navRect.left,
+        width: elRect.width,
+        visible: true,
+        ready: prev.ready,
+      }));
+    };
+
+    update();
+
+    let raf2;
+    const raf1 = requestAnimationFrame(() => {
+      raf2 = requestAnimationFrame(() => {
+        setPill((prev) => (prev.visible && !prev.ready ? { ...prev, ready: true } : prev));
+      });
+    });
+
+    const ro = new ResizeObserver(update);
+    ro.observe(navEl);
+
+    return () => {
+      cancelAnimationFrame(raf1);
+      cancelAnimationFrame(raf2);
+      ro.disconnect();
+    };
+  }, [activeIndex]);
+
   const current =
-    NAV_ITEMS.find((item) => isActive(item, location.pathname)) ||
+    NAV_ITEMS[activeIndex] ||
     (location.pathname.startsWith('/profile') ? { label: 'Profil' } : null);
   const mobileItems = NAV_ITEMS;
   const name = displayName(user);
@@ -67,26 +113,47 @@ export default function AppLayout() {
 
   return (
     <div className="min-h-screen bg-bg text-text">
-      <header className="sticky top-0 z-30 border-b border-border bg-surface">
+      <header className="sticky top-0 z-30 border-b border-border bg-surface/95 backdrop-blur-md">
         <div className="relative flex h-16 w-full items-center justify-between gap-4 px-6">
           <div className="flex min-w-0 items-center gap-3">
             <Brand />
-            <span className="hidden truncate text-sm text-text-muted sm:inline lg:hidden">/ {current?.label || 'ZainSaham'}</span>
+            <span className="hidden truncate text-sm text-text-muted sm:inline lg:hidden">
+              / {current?.label || 'ZainSaham'}
+            </span>
           </div>
 
           <nav
+            ref={navRef}
             aria-label="Navigasi utama"
             className="hidden items-center gap-1 lg:absolute lg:left-1/2 lg:flex lg:-translate-x-1/2"
           >
-            {NAV_ITEMS.map((item) => {
-              const active = isActive(item, location.pathname);
+            {/* Sliding Active Pill */}
+            <span
+              aria-hidden="true"
+              className={`pointer-events-none absolute left-0 top-0 h-9 rounded-badges bg-accent ${
+                pill.visible ? 'opacity-100' : 'opacity-0'
+              }`}
+              style={{
+                width: `${pill.width}px`,
+                transform: `translate3d(${pill.left}px, 0, 0)`,
+                transition: pill.ready
+                  ? 'transform 380ms cubic-bezier(0.22, 1, 0.36, 1), width 380ms cubic-bezier(0.22, 1, 0.36, 1), opacity 200ms ease'
+                  : 'none',
+              }}
+            />
+
+            {NAV_ITEMS.map((item, idx) => {
+              const active = idx === activeIndex;
               return (
                 <NavLink
                   key={item.path}
+                  ref={(el) => {
+                    itemRefs.current[idx] = el;
+                  }}
                   to={item.path}
                   aria-current={active ? 'page' : undefined}
-                  className={`flex h-9 items-center rounded-badges px-4 text-xs font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-iris ${
-                    active ? 'bg-accent text-accent-ink' : 'text-text-muted hover:bg-surface-2 hover:text-text'
+                  className={`relative z-10 flex h-9 items-center whitespace-nowrap rounded-badges px-4 text-xs font-medium transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-iris ${
+                    active ? 'text-accent-ink' : 'text-text-muted hover:bg-surface-2 hover:text-text'
                   }`}
                 >
                   {item.label}
@@ -117,7 +184,7 @@ export default function AppLayout() {
               onClick={() => navigate('/profile')}
               aria-label="Profil"
               title={name}
-              className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-badges bg-accent text-xs font-medium text-accent-ink transition-opacity duration-150 hover:opacity-85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-iris focus-visible:ring-offset-2 ${
+              className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-badges bg-accent text-xs font-medium text-accent-ink transition-all duration-150 hover:opacity-85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-iris focus-visible:ring-offset-2 ${
                 location.pathname === '/profile' ? 'ring-2 ring-border-strong ring-offset-2 ring-offset-surface' : ''
               }`}
             >
@@ -143,23 +210,39 @@ export default function AppLayout() {
 
       <nav
         aria-label="Navigasi utama"
-        className="fixed inset-x-3 bottom-3 z-30 grid h-16 grid-cols-5 rounded-badges border border-border bg-surface/95 backdrop-blur-md lg:hidden"
+        className="fixed inset-x-3 bottom-3 z-30 grid h-16 grid-cols-6 overflow-hidden rounded-badges border border-border bg-surface/95 backdrop-blur-md lg:hidden"
       >
-        {mobileItems.map((item) => {
-          const active = isActive(item, location.pathname);
+        {/* Mobile Sliding Pill */}
+        {activeIndex >= 0 && (
+          <span
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-y-0 left-0 flex flex-col items-center justify-center gap-1"
+            style={{
+              width: `${100 / mobileItems.length}%`,
+              transform: `translate3d(${activeIndex * 100}%, 0, 0)`,
+              transition: 'transform 380ms cubic-bezier(0.22, 1, 0.36, 1)',
+            }}
+          >
+            <span className="h-7 w-11 rounded-badges bg-accent" />
+            <span className="invisible text-micro">x</span>
+          </span>
+        )}
+
+        {mobileItems.map((item, idx) => {
+          const active = idx === activeIndex;
           const Icon = item.icon;
           return (
             <NavLink
               key={item.path}
               to={item.path}
               aria-current={active ? 'page' : undefined}
-              className={`relative flex flex-col items-center justify-center gap-1 text-micro transition-colors duration-150 ${
+              className={`relative z-10 flex flex-col items-center justify-center gap-1 text-micro transition-colors duration-200 ${
                 active ? 'font-medium text-text' : 'text-text-muted'
               }`}
             >
               <span
-                className={`flex h-7 w-12 items-center justify-center rounded-badges transition-colors duration-150 ${
-                  active ? 'bg-accent text-accent-ink' : ''
+                className={`flex h-7 w-11 items-center justify-center rounded-badges transition-colors duration-200 ${
+                  active ? 'text-accent-ink' : ''
                 }`}
               >
                 <Icon className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
